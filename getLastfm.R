@@ -1,12 +1,15 @@
 # Download new lastfm scrobbles and save to local csv file
 # Stored in data/tracks.csv
 
-basedir <- "~/Dropbox/R/lastfm"
-
-library(tidyverse);library(lubridate);library(httr);library(jsonlite)
 
 getLastfm <- function(refresh = FALSE, pages = 5) {
-    # If refresh = FALSE, just loads data from csv
+    
+    basedir <- "~/Dropbox/R/lastfm"
+    
+    library(tidyverse);library(lubridate);library(httr);library(jsonlite)
+    library(readxl)
+    
+    # If refresh = FALSE, just loads data from file
     localData <- read_csv(file.path(basedir, "tracks.csv"))
     
     if(refresh == TRUE) {
@@ -50,25 +53,31 @@ getLastfm <- function(refresh = FALSE, pages = 5) {
                                 date = `date.#text`)
             response1 <- mutate(response1, 
                                 date = parse_date_time(date, "d b Y, H:M"))
+            response1 <- mutate(response1,
+                                date = as.POSIXct(date)) # Can't remember why I need to do this. 
             # NB not piping because it doesn't seem to recognise the date...
-            
+
             # And rbind back to response
             response <- rbind(response, response1) %>% 
-                arrange(desc(date))
+                arrange(desc(date)) %>% 
+                as_data_frame()
         }
         
         # Then filter response for new tracks, and add to localData
         # Check to make sure that oldest value goes back far enough
-        if(max(localData$date > min(response$date))) {
+        response <- response[complete.cases(response),]
+        if(max(localData$date) > min(response$date)) {
             responseNew <- filter(response, date > max(localData$date))
             localData <- rbind(responseNew, localData)
             
             # Then write this back to csv
-            write_csv(localData, file.path(basedir, "tracks.csv"))
+            write_csv(x = localData, path = file.path(basedir, "tracks.csv"))
+            
         } else print("Script didn't go back enough - run again with more pages")
         
         
         
     }
+    
     lastfm <<- localData
 }
