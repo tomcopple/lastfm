@@ -1,18 +1,33 @@
 # Top whatevers of 2016
 
-top2016 <- function(whatever = "artist", top = 11) {
+top2016 <- function(whatever = "artist", top = 10, year = "2016") {
     
     require(tidyverse);require(zoo);require(lubridate);require(plotly)
-    top1 <- filter(lastfm, year(date) == "2016") %>% 
-        group_by_(whatever) %>% 
-        summarise(count = n()) %>% 
-        arrange(desc(count)) %>% 
-        rename_("name" = whatever) %>% 
-        head(top)
+    if(whatever == "artist") {
+        top1 <- lastfm %>% 
+            filter(year(date) == year) %>% 
+            group_by_(whatever) %>% 
+            summarise(count = n()) %>% 
+            arrange(desc(count)) %>% 
+            rename_("name" = whatever) %>% 
+            head(top)
+        
+        # Do album/track differently to make sure artist is the same
+    } else if(whatever %in% c("album", "track")) {
+        top1 <- lastfm %>% 
+            filter(year(date) == year) %>% 
+            group_by_(whatever, "artist") %>% 
+            summarise(count = n()) %>% ungroup() %>% 
+            arrange(desc(count)) %>% head(top) %>% 
+            mutate_("name" = whatever) %>% 
+            select(name, count) %>% 
+            filter(name != "") %>% 
+            arrange(desc(count))
+    } else return("Type must be either artist, album or track.")
     
     topPlot <- lastfm %>% 
         mutate(date = date(date)) %>% 
-        filter(year(date) == "2016") %>% 
+        filter(year(date) == year) %>% 
         filter_(paste(whatever, "%in%", top1[1])) %>% 
         select_(whatever, "date") %>% 
         # Get daily play counts
@@ -27,8 +42,8 @@ top2016 <- function(whatever = "artist", top = 11) {
         right_join(
             x = .,
             y = data.frame(
-                date = seq.Date(from = as.Date("2016-01-01"),
-                                to = as.Date("2016-12-31"),
+                date = seq.Date(from = as.Date(paste0(year, "-01-01")),
+                                to = as.Date(paste0(year, "-12-31")),
                                 by = 1)
             ),
             by = "date"
@@ -49,7 +64,7 @@ top2016 <- function(whatever = "artist", top = 11) {
         scale_fill_brewer("", palette = "Spectral") +
         scale_x_date(date_labels = "%b %Y") +
         labs(x = "", y = "Monthly count",
-             title = paste0("Top ", top, " ", whatever, "s in 2016"))
+             title = paste0("Top ", top, " ", whatever, "s in ", year))
     
     plotlyIt <- ggplotly(topPlotGraph)
     print(plotlyIt)
