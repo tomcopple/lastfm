@@ -10,7 +10,11 @@ getLastfm <- function(refresh = FALSE, pages = 5) {
     library(readxl)
     
     # If refresh = FALSE, just loads data from file
-    localData <- read_csv(file.path(basedir, "tracks.csv"))
+    # Don't use readr as can't handle UTF-16, and some tracks/artists have foreign 
+    # language encoding etc. 
+    localData <- read.csv(file.path(basedir, "tracks.csv"), stringsAsFactors = FALSE,
+                          fileEncoding = "UTF-16LE") %>% 
+        as_data_frame()
     
     if(refresh == TRUE) {
         
@@ -71,7 +75,9 @@ getLastfm <- function(refresh = FALSE, pages = 5) {
             localData <- rbind(responseNew, localData)
             
             # Then write this back to csv
-            write_csv(x = localData, path = file.path(basedir, "tracks.csv"))
+            # NB Don't use readr as can't handle other file encodings. 
+            write.csv(x = localData, path = file.path(basedir, "tracks.csv"),
+                      row.names = FALSE, fileEncoding = "UTF-16LE")
             
         } else print("Script didn't go back enough - run again with more pages")
         
