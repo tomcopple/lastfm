@@ -1,20 +1,18 @@
 # Download new lastfm scrobbles and save to local csv file
-# Stored in data/tracks.csv
+# Stored in Dropbox/R/lastfm/tracks.csv
 
-
+# refresh = FALSE means just reading the csv. 
+# Number of pages: 5 is ~ 1 month, so depends when it was last run. 
 getLastfm <- function(refresh = FALSE, pages = 5) {
     
+    library(tidyverse);library(lubridate);library(httr);library(jsonlite);
     basedir <- "~/Dropbox/R/lastfm"
     
-    library(tidyverse);library(lubridate);library(httr);library(jsonlite)
-    library(readxl)
-    
-    # If refresh = FALSE, just loads data from file
     # Don't use readr as can't handle UTF-16, and some tracks/artists have foreign 
-    # language encoding etc. 
+    # language encoding etc, just use base then convert to tibble.  
     localData <- read.csv(file.path(basedir, "tracks.csv"), stringsAsFactors = FALSE,
                           fileEncoding = "UTF-16LE") %>% 
-        as_data_frame()
+        as_tibble()
     
     if(refresh == TRUE) {
         
@@ -35,48 +33,45 @@ getLastfm <- function(refresh = FALSE, pages = 5) {
         # Need to send multiple calls as limit of 200 per page. Roughly equal to 10 
         # per month, so depends on when it was last run. 
         for(i in 1:pages) {
+            
             url <- paste0(baseurl, i)             # add page number to url
+            
+            ## Just print a basic progress message to console. 
             print(paste0(
-                "This might take a couple of minutes, don't panic... [",
-                pages + 1 - i, "]"
+                "This might take a couple of minutes, don't panic... ",
+                100*(i/pages), "%"
                 ))
-            response1 <- httr::GET(url)           # GET data from url
-            httr::stop_for_status(response1)      # in case it fails. 
-            response1 <- httr::content(response1, as = "text")
+            responseRaw <- httr::GET(url)           # GET data from url
+            httr::stop_for_status(responseRaw)      # in case it fails. 
             
-            # Convert from json?
-            response1 <- fromJSON(response1, simplifyDataFrame = T, flatten = T)
-            response1 <- response1$recenttracks
-            response1 <- response1$track
-            
-            # Only keeping track, title, album, date
-            # NB Date needs to include time, otherwise you lose scrobbles from the day
-            # you last run it if they're afterwards...
-            response1 <- select(response1,
-                                track = name, artist = `artist.#text`, album = `album.#text`, 
-                                date = `date.#text`)
-            response1 <- mutate(response1, 
-                                date = parse_date_time(date, "d b Y, H:M"))
-            response1 <- mutate(response1,
-                                date = as.POSIXct(date)) # Can't remember why I need to do this. 
-            # NB not piping because it doesn't seem to recognise the date...
-
+            # Get text from content and convert from json to dataframe
+            responseClean <- responseRaw %>% 
+                httr::content(., as = "text") %>% 
+                jsonlite::fromJSON(., simplifyDataFrame = T, flatten = T) %>% 
+                `[[`(c('recenttracks', 'track')) %>% 
+                # Only keep track, title, album, date
+                select(track = name, artist = `artist.#text`, 
+                       album = `album.#text`, date = `date.#text`) %>% 
+                # Need to keep time otherwise you might lose scrobbles from the day
+                # you last ran the script. 
+                mutate(date = lubridate::dmy_hm(date))
+                
+         
             # And rbind back to response
-            response <- rbind(response, response1) %>% 
+            response <- bind_rows(response, responseClean) %>% 
                 arrange(desc(date)) %>% 
-                as_data_frame()
-        }
+                na.omit()
+            }
         
         # Then filter response for new tracks, and add to localData
         # Check to make sure that oldest value goes back far enough
-        response <- response[complete.cases(response),]
         if(max(localData$date) > min(response$date)) {
             responseNew <- filter(response, date > max(localData$date))
             localData <- rbind(responseNew, localData)
             
             # Then write this back to csv
             # NB Don't use readr as can't handle other file encodings. 
-            write.csv(x = localData, path = file.path(basedir, "tracks.csv"),
+            write.csv(x = localData, file = file.path(basedir, "tracks.csv"),
                       row.names = FALSE, fileEncoding = "UTF-16LE")
             
         } else print("Script didn't go back enough - run again with more pages")
