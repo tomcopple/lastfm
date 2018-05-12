@@ -4,3 +4,6 @@
 .Ruserdata
 setLastfm.R
 .gitignore
+.Renviron
+.Rapp.history
+*.rds
