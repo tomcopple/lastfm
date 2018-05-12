@@ -3,7 +3,7 @@
 
 # refresh = FALSE means just reading the csv. 
 # Number of pages: 5 is ~ 1 month, so depends when it was last run. 
-getLastfm <- function(refresh = FALSE, pages = 5) {
+getLastfm <- function(refresh = FALSE) {
     
     library(tidyverse);library(lubridate);library(httr);library(jsonlite);
     basedir <- "~/Dropbox/R/lastfm"
@@ -12,12 +12,13 @@ getLastfm <- function(refresh = FALSE, pages = 5) {
     # language encoding etc, just use base then convert to tibble.  
     localData <- read.csv(file.path(basedir, "tracks.csv"), stringsAsFactors = FALSE,
                           fileEncoding = "UTF-16LE") %>% 
+        mutate(date = lubridate::ymd_hms(date)) %>% 
         as_tibble()
     
-    if(refresh == TRUE) {
+    if(refresh) {
         
         # Set user = username, api = api_key
-        source("scripts/setLastfm.R")
+        source(file.path("scripts", "setLastfm.R"))
         user <- setUser()
         api <- setAPI()
         
@@ -28,57 +29,41 @@ getLastfm <- function(refresh = FALSE, pages = 5) {
         )
         
         # Initiate data.frame
-        response <- data_frame()
+        responseDF <- tibble()
+        pageNum <- 1
         
-        # Need to send multiple calls as limit of 200 per page. Roughly equal to 10 
-        # per month, so depends on when it was last run. 
-        for(i in 1:pages) {
+        # Get time/date of most recent local scrobble
+        maxDate <- max(localData$date)
+        
+        # Keep getting data from lastfm until it's caught up with local data
+        while(min(responseDF$date) >= maxDate) {
+            url <- stringr::str_c(baseurl, pageNum, sep = "")
             
-            url <- paste0(baseurl, i)             # add page number to url
-            
-            ## Just print a basic progress message to console. 
-            print(paste0(
-                "This might take a couple of minutes, don't panic... ",
-                100*(i/pages), "%"
-                ))
-            responseRaw <- httr::GET(url)           # GET data from url
-            httr::stop_for_status(responseRaw)      # in case it fails. 
-            
-            # Get text from content and convert from json to dataframe
-            responseClean <- responseRaw %>% 
+            responseRaw <- url %>%
+                httr::GET(.) %>% 
                 httr::content(., as = "text") %>% 
                 jsonlite::fromJSON(., simplifyDataFrame = T, flatten = T) %>% 
-                `[[`(c('recenttracks', 'track')) %>% 
-                # Only keep track, title, album, date
-                select(track = name, artist = `artist.#text`, 
+                magrittr::extract2(c("recenttracks", "track")) %>% 
+                select(track = name, artist = `artist.#text`,
                        album = `album.#text`, date = `date.#text`) %>% 
-                # Need to keep time otherwise you might lose scrobbles from the day
-                # you last ran the script. 
-                mutate(date = lubridate::dmy_hm(date))
-                
-         
-            # And rbind back to response
-            response <- bind_rows(response, responseClean) %>% 
-                arrange(desc(date)) %>% 
+                mutate(date = lubridate::dmy_hm(date)) %>% 
                 na.omit()
-            }
-        
-        # Then filter response for new tracks, and add to localData
-        # Check to make sure that oldest value goes back far enough
-        if(max(localData$date) > min(response$date)) {
-            responseNew <- filter(response, date > max(localData$date))
-            localData <- rbind(responseNew, localData)
+            responseDF <- bind_rows(responseDF, responseRaw) %>% 
+                arrange(desc(date))
             
-            # Then write this back to csv
-            # NB Don't use readr as can't handle other file encodings. 
-            write.csv(x = localData, file = file.path(basedir, "tracks.csv"),
+            pageNum <- pageNum + 1
+        }
+        
+        localData <- bind_rows(
+            filter(responseDF, date > maxDate),
+            localData
+        )
+        
+        write.csv(localData, file = file.path(basedir, "tracks.csv"),
                       row.names = FALSE, fileEncoding = "UTF-16LE")
-            
-        } else print("Script didn't go back enough - run again with more pages")
-        
         
         
     }
     
-    lastfm <<- localData
+    .GlobalEnv$lastfm <- localData
 }
