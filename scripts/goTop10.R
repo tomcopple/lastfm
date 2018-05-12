@@ -3,7 +3,7 @@
 
 goTop10 <- function(choosetype = "artist", howlong = 1) {
     
-    library(tidyverse);library(lubridate);library(plotly);library(RColorBrewer);library(zoo)
+    library(tidyverse);library(lubridate);library(plotly);library(zoo)
     
     # Cbeck that lastm data exists first
     if(!exists("lastfm")) {return("Need to run getLastfm.R first")}
@@ -69,15 +69,14 @@ goTop10 <- function(choosetype = "artist", howlong = 1) {
         filter(!is.na(monthlyPlays)) %>% 
         as_data_frame()
     
+    top10graph <- daily2 %>% 
+        group_by(name) %>% 
+        plot_ly(x = ~date, y = ~monthlyPlays, color = ~name, type = "scatter", mode = "lines", fill = "tozeroy", colors = "Spectral") %>% 
+        layout(
+            xaxis = list(title = ""),
+            yaxis = list(title = "Monthly plays"),
+            title = stringr::str_c("Top ten ", choosetype, "s over the last ", howlong * 12, " months")
+        )
     
-    top10graph <- ggplot(daily2, 
-                         aes(x = date, y = monthlyPlays, fill = name)) +
-        geom_area(alpha = 0.7, position = "dodge", size = 1.2) +
-        scale_fill_brewer("", palette = "Spectral") +
-        scale_x_date(date_labels = "%b %Y") +
-        labs(x = "", y = "Monthly count", 
-             title = paste0("Top ten ", choosetype, "s over the last ", howlong*12, " months"))
-    
-    top10plotly <- ggplotly(top10graph)
-    print(top10plotly)
+    print(top10graph)
 }
