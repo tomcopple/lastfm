@@ -1,0 +1,13 @@
+name: lastfmShiny
+title: lastfmShiny
+username:
+account: tomcopple
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 181512
+bundleId: 1370576
+url: https://tomcopple.shinyapps.io/lastfmShiny/
+when: 1526155448.5686
+asMultiple: FALSE
+asStatic: FALSE
+ignoredFiles: lastfm.csv|localData.csv
