@@ -1,6 +1,6 @@
 # Top whatevers of 2016
 
-top2016 <- function(whatever = "artist", top = 10, year = "2016") {
+top2016 <- function(whatever = "album", top = 50, year = "2018") {
     
     require(tidyverse);require(zoo);require(lubridate);require(plotly)
     if(whatever == "artist") {
@@ -18,7 +18,8 @@ top2016 <- function(whatever = "artist", top = 10, year = "2016") {
             filter(year(date) == year) %>% 
             group_by_(whatever, "artist") %>% 
             summarise(count = n()) %>% ungroup() %>% 
-            arrange(desc(count)) %>% head(top) %>% 
+            arrange(desc(count)) %>% 
+            head(top) %>% 
             mutate_("name" = whatever) %>% 
             select(name, count) %>% 
             filter(name != "") %>% 
