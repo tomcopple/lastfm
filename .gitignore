@@ -7,3 +7,4 @@ setLastfm.R
 .Renviron
 .Rapp.history
 *.rds
+.httr-oauth

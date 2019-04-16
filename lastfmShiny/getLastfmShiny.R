@@ -5,11 +5,12 @@ getLastfmShiny <- function() {
     # Change of plan - just use a csv of tracks in Dropbox and read/write from that
     # I'll just have to manually update the Dropbox file occasionally from home.
     dropbox <- readRDS('dropbox.rds')
-    localData <- rdrop2::drop_read_csv('R/lastfm/tracks.csv', stringsAsFactors = FALSE,
-                                       fileEncoding = "UTF-16LE", 
-                                       dtoken = dropbox) %>% 
+    rdrop2::drop_download("R/lastfm/tracks.csv", 
+                          local_path = "tracks-old.csv", overwrite = TRUE, dtoken = dropbox)
+    localData <- readr::read_csv('tracks-old.csv') %>% 
         mutate(date = lubridate::ymd_hms(date)) %>% 
-        as_data_frame()
+        filter(!is.na(date)) %>% 
+        as_tibble()
     maxDate = max(localData$date)
     
     # Username and Api key are stored as environmental variables. (?)
@@ -45,6 +46,10 @@ getLastfmShiny <- function() {
         dplyr::filter(responseDF, date > maxDate),
         localData
     )
+    
+    ## Then save updated data as a local csv and upload back to Dropbox. 
+    write.csv(localData, file = "tracks.csv", row.names = FALSE, fileEncoding = "UTF-8")
+    rdrop2::drop_upload(file = "tracks.csv", path = "R/lastfm")
     
     return(localData)
 }
