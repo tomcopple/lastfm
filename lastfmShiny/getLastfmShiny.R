@@ -49,7 +49,7 @@ getLastfmShiny <- function() {
     
     ## Then save updated data as a local csv and upload back to Dropbox. 
     write.csv(localData, file = "tracks.csv", row.names = FALSE, fileEncoding = "UTF-8")
-    rdrop2::drop_upload(file = "tracks.csv", path = "R/lastfm")
+    rdrop2::drop_upload(file = "tracks.csv", path = "R/lastfm", dtoken = dropbox)
     
     return(localData)
 }

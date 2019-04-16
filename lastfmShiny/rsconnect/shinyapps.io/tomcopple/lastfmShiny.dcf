@@ -5,9 +5,9 @@ account: tomcopple
 server: shinyapps.io
 hostUrl: https://api.shinyapps.io/v1
 appId: 181512
-bundleId: 2015446
+bundleId: 2015469
 url: https://tomcopple.shinyapps.io/lastfmShiny/
-when: 1555415242.17894
+when: 1555415706.2399
 asMultiple: FALSE
 asStatic: FALSE
-ignoredFiles: lastfm.csv|tracks-new.csv|tracks-old.csv|tracks.csv
+ignoredFiles: tracks-old.csv|tracks.csv
