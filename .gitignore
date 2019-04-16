@@ -4,7 +4,9 @@
 .Ruserdata
 setLastfm.R
 .gitignore
+lastfmShiny/.Renviron
 .Renviron
 .Rapp.history
 *.rds
 .httr-oauth
+tempfile.csv
