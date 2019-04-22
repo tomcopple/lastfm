@@ -1,6 +1,7 @@
 ## Get lastfm scrobbles for Shiny App
 library(rdrop2);library(tidyverse)
 getLastfmShiny <- function() {
+    print("Getting Lastfm Shiny")
     
     # Change of plan - just use a csv of tracks in Dropbox and read/write from that
     # I'll just have to manually update the Dropbox file occasionally from home.
@@ -18,7 +19,7 @@ getLastfmShiny <- function() {
     user <- Sys.getenv('LASTFM_USER')
     api <- Sys.getenv('LASTFM_APIKEY')
     
-    responseDF <- data_frame()
+    responseDF <- tibble()
     pageNum <- 1
     
     # Keep getting data from lastfm until it's caught up with local data. 

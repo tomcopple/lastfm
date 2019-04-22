@@ -1,13 +1,17 @@
-library(shiny);library(shinymaterial);library(plotly);library(tidyverse);library(RColorBrewer);library(lubridate);library(rdrop2);library(zoo);library(magrittr)
+library(shiny);library(shinymaterial);library(plotly);library(tidyverse);library(RColorBrewer);
+library(lubridate);library(rdrop2);library(zoo);library(magrittr);library(stringr);library(forcats)
 
 # Define a function to get lastfm data. 
 source('getLastfmShiny.R')
 
+refresh = TRUE
+
 # Run the function
-lastfm <- getLastfmShiny()
-# lastfm <- read.csv("lastfm.csv", stringsAsFactors = F, fileEncoding = "UTF-16LE") %>% 
-#     mutate(date = lubridate::ymd_hms(date)) %>% 
-#     as_data_frame()
+if(refresh) {
+    lastfm <- getLastfmShiny()
+} else {
+    lastfm <- read_csv("tracks.csv")
+}
 
 artistList <- unique((lastfm %>% distinct(artist, album, track) %>%
                           filter(album != "", !grepl("unknown", artist)) %>% 
@@ -62,7 +66,8 @@ ui <- material_page(
             ),
             material_column(
                 width = 9, 
-                material_card(title = "", plotlyOutput("top10plotly", height = "100%"))
+                material_card(title = "", plotlyOutput("plotlyTime", height = "100%")),
+                material_card(title = "", plotlyOutput("plotlyBar", height = "100%"))
                 )
             )
         ),
@@ -127,145 +132,91 @@ server <- function(input, output, session) {
         
     })
     
-    output$top10plotly <- renderPlotly({
-        # Filter for year, unless it says all time
+    observeEvent({
+        input$chooseYear
+        input$chooseType
+    }, {
         chooseYear <- input$chooseYear
         chooseType <- input$chooseType
         
         if(chooseYear == "All time") {
             top10data <- values$lastfm
-            minDate <- as_date(min(top10data$date))
-            maxDate <- as_date(max(top10data$date))
+            values$minDate <- as_date(min(top10data$date))
+            values$maxDate <- as_date(max(top10data$date))
         } else {
             top10data <- filter(values$lastfm, year(date) == chooseYear)
-            minDate <- dmy(paste0("01-01-", chooseYear))
-            maxDate <- dmy(paste0("31-12-", chooseYear))
+            values$minDate <- dmy(paste0("01-01-", chooseYear))
+            values$maxDate <- dmy(paste0("31-12-", chooseYear))
         }
         
-        # If it's tracks or albums, need to make sure it's the right one
-        # Just do three functions for each one, too complicated otherwise
-        if(chooseType == "Artists") {
-            top10 <- top10data %>% 
-                mutate(artist = stringr::str_to_title(artist)) %>% 
-                count(artist, sort = T) %>% 
-                top_n(10) %>% 
-                ## If there are more than 10 results (e.g. tie), just force it to take 10 rows
-                head(10) %>% 
-                magrittr::extract2('artist')
-            
-            ## Must be an easier way of doing this, but going to split into lists
-            ## then rejoin together afterwards?
-            top10plays <- top10data %>% 
-                
-                mutate(artist = stringr::str_to_title(artist)) %>% 
-                
-                ## Filter for top 10 artists
-                filter(artist %in% top10) %>% 
-                select(artist, date) %>% 
-                
-                ## Get total count of plays for each day
-                mutate(date = lubridate::as_date(date)) %>% 
-                count(artist, date) %>% 
-                
-                ## Convert to list column
-                nest(-artist) %>% 
-                
-                ## Merge with a dataframe containing a sequence of days for the whole year
-                mutate(dateSeq = list(data_frame(
-                    date = seq.Date(from = minDate, to = maxDate, by = 1)))) %>% 
-                mutate(fullJoin = map2(data, dateSeq, full_join, by = "date")) %>% 
-                
-                ## Get rolling 30 day count for graph (cum sum for first month)
-                mutate(fullJoin = map(fullJoin, arrange, date)) %>% 
-                mutate(fullJoin = map(fullJoin, mutate, n = ifelse(is.na(n), 0, n))) %>% 
-                mutate(fullJoin = map(fullJoin, mutate, 
-                                       plays = c(cumsum(n[1:29]),
-                                                 zoo::rollsum(n, k = 30, align = "right")))) %>% 
-                unnest(fullJoin) %>% 
-                
-                ## Just renaming to x for the graph, not important. 
-                rename(x = artist)
-            
-            ## Seems to work
-                
-        } else if(chooseType == "Albums") {
-                
-            ## Just do the exact same thing but for albums. I'm sure this can be simplified. 
-            ## Actually, keep artists to make sure there aren't 2 albums with the same name. 
-            top10 <- top10data %>%
-                mutate(artist = stringr::str_to_title(artist),
-                       album  = stringr::str_to_title(album)) %>% 
-                count(artist, album, sort = T) %>% 
-                top_n(10) %>% 
-                head(10) %>% 
-                unite(col = "album", artist, album) %>% 
-                extract2('album')
-            
-            ## Must be an easier way of doing this, but going to split into lists
-            ## then rejoin together afterwards?
-            top10plays <- top10data %>% 
-                mutate(artist = stringr::str_to_title(artist),
-                       album  = stringr::str_to_title(album)) %>% 
-                unite(col = "album", artist, album) %>% 
-                filter(album %in% top10) %>% 
-                select(album, date) %>% 
-                mutate(date = lubridate::as_date(date)) %>% 
-                count(album, date) %>% 
-                nest(-album) %>% 
-                mutate(dateSeq = list(data_frame(
-                    date = seq.Date(from = minDate, to = maxDate, by = 1)))) %>% 
-                mutate(fullJoin = map2(data, dateSeq, full_join, by = "date")) %>% 
-                mutate(fullJoin = map(fullJoin, arrange, date)) %>% 
-                mutate(fullJoin = map(fullJoin, mutate, n = ifelse(is.na(n), 0, n))) %>% 
-                mutate(fullJoin = map(fullJoin, mutate, 
-                                      plays = c(cumsum(n[1:29]),
-                                                zoo::rollsum(n, k = 30, align = "right")))) %>% 
-                unnest(fullJoin) %>% 
-                separate(album, into = c('artist', 'album'), sep = "_") %>% 
-                mutate(x = stringr::str_c(album, " [", artist, "]"))
+        ## For tracks and albums, combine with artists first (as newCol). 
+        if (chooseType == "Artists") {
+            top10data <- mutate(top10data, newCol = str_to_title(artist))
         } else {
-            top10 <- top10data %>% 
-                mutate(artist = stringr::str_to_title(artist),
-                       track  = stringr::str_to_title(track)) %>% 
-                count(artist, track, sort = T) %>% 
-                top_n(10) %>% 
-                head(10) %>% 
-                unite(col = "track", artist, track) %>% 
-                extract2('track')
-            
-            ## Must be an easier way of doing this, but going to split into lists
-            ## then rejoin together afterwards?
-            top10plays <- top10data %>% 
-                mutate(artist = stringr::str_to_title(artist),
-                       track  = stringr::str_to_title(track)) %>% 
-                unite(col = "track", artist, track) %>% 
-                filter(track %in% top10) %>% 
-                select(track, date) %>% 
-                mutate(date = lubridate::as_date(date)) %>% 
-                count(track, date) %>% 
-                nest(-track) %>% 
-                mutate(dateSeq = list(data_frame(
-                    date = seq.Date(from = minDate, to = maxDate, by = 1)))) %>% 
-                mutate(fullJoin = map2(data, dateSeq, full_join, by = "date")) %>% 
-                mutate(fullJoin = map(fullJoin, arrange, date)) %>% 
-                mutate(fullJoin = map(fullJoin, mutate, n = ifelse(is.na(n), 0, n))) %>% 
-                mutate(fullJoin = map(fullJoin, mutate, 
-                                      plays = c(cumsum(n[1:29]),
-                                                zoo::rollsum(n, k = 30, align = "right")))) %>% 
-                unnest(fullJoin) %>% 
-                separate(track, into = c('artist', 'track'), sep = "_") %>% 
-                mutate(x = stringr::str_c(track, "<br>[", artist, "]")) 
+            top10data <- unite(top10data, col = "newCol", sep = " - ",
+                               ... = c("artist", str_to_lower(str_sub(chooseType, 0, -2)))) %>% 
+                mutate(newCol = str_to_title(newCol))
         }
+        
+        ## Now get top 10 of newCol and filter data
+        top10 <- top10data %>% count(newCol, sort = T) %>% 
+            head(10) %>% pull('newCol')
+        values$top10data <- top10data %>% 
+            filter(newCol %in% top10 ) %>% 
+            mutate(date = as_date(date)) %>% 
+            select(newCol, date)
+    })
+    
+    output$plotlyTime <- renderPlotly({
+        
+        ## Use the values$top10data, with newCol as the column of interest
+        top10plays <- values$top10data %>% 
+            ## Create a count per day
+            count(newCol, date) %>% 
+            ## Then combine with a sequence of days for the whole year to get rolling
+            spread(key = newCol, value = n) %>% 
+            full_join(., data.frame(
+                date = seq.Date(from = values$minDate, to = values$maxDate, by = 1)
+            ), by = "date") %>% 
+            gather(-date, key = newCol, value = n) %>% 
+            ## And replace all the NAs with 0
+            mutate(n = replace_na(n, 0)) %>% 
+            arrange(newCol, date) %>% 
+            ## And add rolling 30 day
+            group_by(newCol) %>% 
+            mutate(plays = c(cumsum(n[1:29]), 
+                             zoo::rollsum(n, k = 30, align = "right")))
         
         top10plays %>% 
-            group_by(x) %>% 
-            plot_ly(x = ~date, y = ~plays, color = ~x, type = "scatter", mode = "lines",
+            group_by(newCol) %>% 
+            plot_ly(x = ~date, y = ~plays, color = ~newCol, type = "scatter", mode ="lines",
                     fill = "tozeroy", colors = "Spectral", 
-                    text = ~stringr::str_c(x, "<br>Plays: ", plays), hoverinfo = "text") %>% 
+                    text = ~str_c(newCol, "<br>Plays: ", plays), hoverinfo = "text") %>% 
             layout(xaxis = list(title = ""),
                    yaxis = list(title = "Monthly plays"),
-                   title = stringr::str_c("Top ten ", tolower(chooseType), " in ", chooseYear),
-                   legend = list(orientation = "h", xanchor = "center", x = 0.5))
+                   title = str_c("Top ten ", tolower(input$chooseType), " in ", input$chooseYear),
+                   legend = list(orientation = "h", xanchor = "center", x = 0.5,
+                                                    yanchor = "bottom"))
+            
+    })
+    
+    output$plotlyBar <- renderPlotly({
+        
+        ## Just a horizontal bar chart showing totals
+        values$top10data %>% 
+            count(newCol, sort = T) %>% 
+            mutate(newCol = forcats::fct_inorder(newCol)) %>% 
+            group_by(newCol) %>% 
+            plot_ly(x = ~n, y = ~newCol, color = ~newCol, type = "bar",
+                    text = ~n, textposition = "outside",
+                    orientation = "h", colors = "Spectral",
+                    hovertext = ~str_c(newCol, n, sep = ": <br>"), hoverinfo = "text"
+                    ) %>% 
+            layout(showlegend = FALSE, bargap = 0.5,
+                   xaxis = list(title = "", zeroline = FALSE),
+                   yaxis = list(title = ""),
+                   margin = list(l = 120, r = 40))
+        
     })
     
     

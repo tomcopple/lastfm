@@ -16,6 +16,7 @@ getLastfm <- function(refresh = TRUE) {
         mutate(date = lubridate::ymd_hms(date)) %>%
         filter(!is.na(date)) %>%
         as_tibble()
+    
     maxDate = max(localData$date)
     user <- Sys.getenv('LASTFM_USER')
     api <- Sys.getenv('LASTFM_APIKEY')
