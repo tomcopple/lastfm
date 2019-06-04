@@ -171,6 +171,9 @@ server <- function(input, output, session) {
         
         ## Use the values$top10data, with newCol as the column of interest
         top10plays <- values$top10data %>% 
+            mutate(newCol = ifelse(str_detect(newCol, " - "),
+                                   str_c(str_replace_all(newCol, " - ", "<br><em>"), "</em>"),
+                                   newCol)) %>% 
             ## Create a count per day
             count(newCol, date) %>% 
             ## Then combine with a sequence of days for the whole year to get rolling
@@ -196,7 +199,7 @@ server <- function(input, output, session) {
                    yaxis = list(title = "Monthly plays"),
                    title = str_c("Top ten ", tolower(input$chooseType), " in ", input$chooseYear),
                    legend = list(orientation = "h", xanchor = "center", x = 0.5,
-                                                    yanchor = "bottom"))
+                                                    yanchor = "top", y = 0))
             
     })
     
@@ -204,6 +207,9 @@ server <- function(input, output, session) {
         
         ## Just a horizontal bar chart showing totals
         values$top10data %>% 
+            mutate(newCol = ifelse(str_detect(newCol, " - "),
+                                   str_c(str_replace_all(newCol, " - ", "<br><em>"), "</em>"),
+                                   newCol)) %>% 
             count(newCol, sort = T) %>% 
             mutate(newCol = forcats::fct_inorder(newCol)) %>% 
             group_by(newCol) %>% 
