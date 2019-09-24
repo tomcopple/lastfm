@@ -3,76 +3,81 @@ library(tidyverse);library(httr);library(purrr);library(stringr);library(spotify
 library(here)
 source(here::here('scripts', 'getLastfm.R'))
 
-lastfm <- getLastfm(F)
+lastfm <- getLastfm(T)
 
 ## Filter for playcount > 5, not played in last year
 getPlaylist <- function(playCount = 5, lastPlayed = 1, howMany = 20) {
-    lastfm %>% 
+    potentialTracks <- lastfm %>% 
         group_by(artist, track) %>% 
         summarise(n = n(), date = max(date)) %>% 
         ungroup() %>% 
-        filter(n > playCount, date < lubridate::today() - lubridate::years(lastPlayed)) %>% 
-        arrange(desc(n)) -> tracks
+        filter(n > playCount, 
+               date < lubridate::today() - lubridate::years(lastPlayed),
+               str_detect(artist, "[Ss]tars [Oo]f [Tt]he [Ll]id", negate = TRUE),
+               str_detect(artist, "Eluvium", negate = TRUE),
+               str_detect(artist, "Winged Victory", negate = TRUE),
+               str_detect(artist, "Inventions", negate = TRUE),
+               str_detect(artist, "Brian McBride", negate = TRUE),
+               str_detect(artist, "Beethoven|Mozart|Chopin", negate = TRUE)
+               ) %>% 
+        arrange(desc(n))
     
-    if(howMany > nrow(tracks)) {
-        howMany <- nrow(tracks)
+    print(str_c("Potential tracks: ", nrow(potentialTracks)))
+    if (howMany > nrow(potentialTracks)) {
+        howMany <- nrow(potentialTracks)
     }
     
-    playlist <- sample_n(tracks, howMany) %>% 
-        print() %>% 
+    ## Save playlist here
+    playlist <- sample_n(potentialTracks, howMany) %>% 
         unite(col = tracks, artist, track, sep = " ") %>% 
         select(-n, -date) %>% 
         magrittr::extract2('tracks')
     
+    ## Set up Spotify authentication
     playlistID <- "1BBr03knQFBNoj3EUN2rpm"
     
     token <- spotifyr::get_spotify_access_token(
         client_id = "95bdfb9cb87841208145ede83a2dd878", client_secret = "2ada4a2188b7420d8833b2fe783e5c03"
     )
+    
     endpoint <- oauth_endpoint(
         authorize = "https://accounts.spotify.com/authorize",
         access =    "https://accounts.spotify.com/api/token")
+    
     app <- oauth_app(appname = "last2spot", key = "95bdfb9cb87841208145ede83a2dd878",secret = "2ada4a2188b7420d8833b2fe783e5c03")
+    
     spotAuth <- oauth2.0_token(endpoint = endpoint, app = app,
                                scope = c('playlist-modify', 'playlist-modify-private'))
     
     
-    spotIDs <- playlist %>% map_chr(function(x) {
-        query <- list(
-            q = x,
-            type = "track",
-            market = "GB",
-            limit = 1,
-            access_token = token
-        )
+    ## Look up and save playlist IDs
+    getIDs <- function(track) {
+        query <- list(q = track, type = 'track', market = 'GB', limit = 1, access_token = token)
         res <- httr::GET(url = "https://api.spotify.com/v1/search", query = query)
         resContent <- content(res)
-        if(resContent$tracks$total > 0) {
+        if (resContent$tracks$total > 0) {
             resID <- resContent$tracks$items[[1]]$id
         } else {
             resID <- NA
         }
         return(resID)
-    })
-    
-    res <- httr::PUT(
-        url = stringr::str_c(
-            "https://api.spotify.com/v1/playlists/", playlistID, "/tracks", sep = ""
-        ), 
-        body = list(
-            uris = str_c("spotify:track:", na.omit(spotIDs), sep = "")
-        ),
-        config(token = spotAuth), encode = "json"
-    )
-    
-    
-    jsonlite::fromJSON(content(res, as = "text", encoding = "UTF-8"), 
-                       flatten = TRUE)
+    }
+    spotIDs <- playlist %>% map_chr(., getIDs)
     
 
     
+    ## Then try to send them all to the playlist
+    httr::PUT(url = str_c('https://api.spotify.com/v1/playlists/', playlistID, '/tracks'),
+              body = list(uris = str_c('spotify:track:', na.omit(spotIDs))),
+              httr::config(token = spotAuth), encode = 'json'
+    )
+    
+    print(enframe(playlist))
+    return(enframe(playlist))
+    
+     
     }
-playlist <- getPlaylist(6, 3, 25)
+playlist <- getPlaylist(6, 8, 25)
 
 
 
