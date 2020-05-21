@@ -154,7 +154,7 @@ server <- function(input, output, session) {
             top10data <- mutate(top10data, newCol = str_to_title(artist))
         } else {
             top10data <- unite(top10data, col = "newCol", sep = " - ",
-                               ... = c("artist", str_to_lower(str_sub(chooseType, 0, -2)))) %>% 
+                               c("artist", str_to_lower(str_sub(chooseType, 0, -2)))) %>% 
                 mutate(newCol = str_to_title(newCol))
         }
         
@@ -246,27 +246,43 @@ server <- function(input, output, session) {
             input$chooseArtist, "_shinymaterialdropdownspace_", " "
         )
         
-        values$plays <- values$lastfm %>% 
-            filter(artist == values$chooseArtist) %>% 
-            mutate(track = getSlugs(track), album = getSlugs(album)) %>%
-            ## summarise album if < 10 plays
-            add_count(album) %>% 
-            mutate(albumGroup = ifelse(n < 10 | album == "", "others", album)) %>% 
-            mutate(album = forcats::as_factor(album))
-            
+        artistTracks <- values$lastfm %>% 
+          filter(artist == values$chooseArtist) %>% 
+          mutate(track = getSlugs(track),
+                 album = getSlugs(album))
+        
+        ## Want to limit each track to one album, just use the most popular (i.e. the one most tracks appear on, excluding NA)
+        albumList <- artistTracks %>% 
+          distinct(track, artist, album) %>% 
+          na.omit() %>% 
+          group_by(album) %>% 
+          mutate(n = n()) %>% 
+          group_by(track) %>% 
+          arrange(desc(n)) %>% 
+          slice(1) %>% 
+          distinct(track,album) %>% ungroup()
+        
+        values$plays <- full_join(artistTracks %>% select(-album),
+                                albumList, by = 'track') %>% 
+          mutate(album = ifelse(is.na(album) | album == '',
+                                'others', album)) %>% 
+          add_count(album) %>%
+          mutate(album = ifelse(n < 9, 'others', album)) %>% 
+          arrange(date) %>% 
+          mutate(album = forcats::fct_inorder(album)) %>% 
+          arrange(album, date) %>% 
+          mutate(track = forcats::fct_inorder(track))
+        
     })
+        
     
     ## first tab: plotly of tracks over time (rough)
     output$trackPlays <- renderPlotly({
         
-        trackPlays <- values$plays %>% 
-            # Want to re-order albums by first time any song was played
-            arrange(date) %>% 
-            mutate(albumGroup = forcats::fct_inorder(albumGroup)) %>% 
-            mutate(track = forcats::as_factor(track))
-  
+        trackPlays <- values$plays 
+        
         # Plotly. Very basic. 
-        plot_ly(trackPlays, x = ~date, y = ~track, color = ~albumGroup, 
+        plot_ly(trackPlays, x = ~date, y = ~track, color = ~album, 
                 type = "scatter", colors = "Spectral",
                 text = ~paste0("(", album, ") ", track), 
                 hoverinfo = "text") %>% 
@@ -286,9 +302,9 @@ server <- function(input, output, session) {
     output$albumPlays <- renderPlotly({
         
         albumPlays <- values$plays %>%
-            count(albumGroup) %>%
+            count(album) %>%
             # distinct(albumGroup, n) %>% 
-            mutate(albumGroup = forcats::fct_reorder(albumGroup, n))
+            mutate(albumGroup = forcats::fct_reorder(album, n))
             
         plot_ly(data = albumPlays, x = ~n, y = ~albumGroup, type = "bar",
                 text = ~n, textposition = "outside",
