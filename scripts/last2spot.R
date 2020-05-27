@@ -1,25 +1,33 @@
 ## Get Playlist of tracks with more than 5 plays but not in the last year
 library(tidyverse);library(httr);library(purrr);library(stringr);library(spotifyr)
-library(here)
+library(here);library(lubridate)
 source(here::here('scripts', 'getLastfm.R'))
 
 lastfm <- getLastfm(T)
 
 ## Filter for playcount > 5, not played in last year
-getPlaylist <- function(playCount = 5, lastPlayed = 1, howMany = 20) {
+getPlaylist <- function(playCount = 6, lastPlayed = 5, howMany = 25) {
+    
+    ## Get list of potential tracks, remove unwanted Artists
     potentialTracks <- lastfm %>% 
-        group_by(artist, track) %>% 
-        summarise(n = n(), date = max(date)) %>% 
-        ungroup() %>% 
-        filter(n > playCount, 
-               date < lubridate::today() - lubridate::years(lastPlayed),
-               str_detect(artist, "[Ss]tars [Oo]f [Tt]he [Ll]id", negate = TRUE),
+        ## NA albums get removed, so convert to character
+        mutate(album = ifelse(is.na(album), 'NA', album)) %>% 
+        mutate_if(is.character, str_to_title) %>% 
+        ##Testing this out - remove everything after a ( or a - in a 
+        ## track title, to get rid of (2019 remaster), (demo), (alternate) etc
+        mutate(track = str_remove_all(track, "\\s[\\(\\-].*")) %>% 
+        filter(str_detect(artist, "Stars Of The Lid", negate = TRUE),
                str_detect(artist, "Eluvium", negate = TRUE),
                str_detect(artist, "Winged Victory", negate = TRUE),
                str_detect(artist, "Inventions", negate = TRUE),
-               str_detect(artist, "Brian McBride", negate = TRUE),
-               str_detect(artist, "Beethoven|Mozart|Chopin", negate = TRUE)
-               ) %>% 
+               str_detect(artist, "Brian Mcbride", negate = TRUE),
+               str_detect(artist, "Beethoven|Mozart|Chopin", negate = TRUE),
+               str_detect(album, 'Beethoven|Mozart|Chopin', negate = TRUE)) %>% 
+        group_by(artist, track) %>% 
+        summarise(n = n(), date = max(date)) %>% 
+        ungroup() %>% 
+        dplyr::filter(n > playCount, 
+               date < lubridate::today() - lubridate::years(lastPlayed)) %>% 
         arrange(desc(n))
     
     print(str_c("Potential tracks: ", nrow(potentialTracks)))
@@ -32,6 +40,21 @@ getPlaylist <- function(playCount = 5, lastPlayed = 1, howMany = 20) {
         unite(col = tracks, artist, track, sep = " ") %>% 
         select(-n, -date) %>% 
         magrittr::extract2('tracks')
+    
+    ## Plot chart of monthly plays for all tracks, for fun
+    
+    chart <- lastfm %>%
+        mutate_if(is.character, str_to_title) %>% 
+        unite(col = tracks, artist, track, sep = " ") %>% 
+        filter(tracks %in% playlist) %>% 
+        mutate(month = floor_date(date, 'month')) %>% 
+        group_by(tracks, month) %>% count() %>% ungroup() %>% 
+        mutate(tracks = forcats::fct_rev(tracks)) %>%  
+        ggplot(aes(x = month, y = tracks, color = tracks, size = n)) + 
+        geom_point() + 
+        theme(legend.position = 'none') + xlab("") + ylab("")
+    print(chart)
+    
     
     ## Set up Spotify authentication
     playlistID <- "1BBr03knQFBNoj3EUN2rpm"
@@ -77,7 +100,7 @@ getPlaylist <- function(playCount = 5, lastPlayed = 1, howMany = 20) {
     
      
     }
-playlist <- getPlaylist(6, 8, 25)
+playlist <- getPlaylist(6, 5, 25)
 
 
 
