@@ -11,3 +11,5 @@ lastfmShiny/.Renviron
 .httr-oauth
 tempfile.csv
 tracks.csv
+lastfmShiny/tracks.csv
+
