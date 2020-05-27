@@ -8,21 +8,24 @@ lastfm <- getLastfm(T)
 ## Filter for playcount > 5, not played in last year
 getPlaylist <- function(playCount = 6, lastPlayed = 5, howMany = 25) {
     
-    ## Get list of potential tracks, remove unwanted Artists
-    potentialTracks <- lastfm %>% 
+    lastfm <- lastfm %>% 
         ## NA albums get removed, so convert to character
         mutate(album = ifelse(is.na(album), 'NA', album)) %>% 
         mutate_if(is.character, str_to_title) %>% 
         ##Testing this out - remove everything after a ( or a - in a 
         ## track title, to get rid of (2019 remaster), (demo), (alternate) etc
-        mutate(track = str_remove_all(track, "\\s[\\(\\-].*")) %>% 
+        mutate(track = str_remove_all(track, "\\s[\\(\\-\\[].*")) %>% 
         filter(str_detect(artist, "Stars Of The Lid", negate = TRUE),
                str_detect(artist, "Eluvium", negate = TRUE),
                str_detect(artist, "Winged Victory", negate = TRUE),
                str_detect(artist, "Inventions", negate = TRUE),
                str_detect(artist, "Brian Mcbride", negate = TRUE),
+               str_detect(artist, 'Symphony|Orchestra', negate = TRUE),
                str_detect(artist, "Beethoven|Mozart|Chopin", negate = TRUE),
-               str_detect(album, 'Beethoven|Mozart|Chopin', negate = TRUE)) %>% 
+               str_detect(album, 'Beethoven|Mozart|Chopin', negate = TRUE))
+    
+    ## Get list of potential tracks, remove unwanted Artists
+    potentialTracks <- lastfm %>% 
         group_by(artist, track) %>% 
         summarise(n = n(), date = max(date)) %>% 
         ungroup() %>% 
