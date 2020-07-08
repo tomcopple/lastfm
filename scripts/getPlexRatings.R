@@ -27,3 +27,8 @@ ratedDF <- rated %>%
 
 write_csv(ratedDF, file.path("~", "Dropbox (Personal)", "R", "lastfm", 
                              str_c(lubridate::today(), "-plexRatings.csv")))
+
+ratedDF %>% group_by(albumArtist, album) %>% 
+    filter(n() > 1) %>% 
+    summarise(avRat = mean(rating)/2) %>% 
+    arrange(desc(avRat))
