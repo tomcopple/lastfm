@@ -195,7 +195,7 @@ server <- function(input, output, session) {
             plot_ly(x = ~date, y = ~plays, color = ~newCol, type = "scatter", mode ="lines",
                     fill = "tozeroy", colors = "Spectral", 
                     text = ~str_c(newCol, "<br>Plays: ", plays), hoverinfo = "text") %>% 
-            layout(xaxis = list(title = ""),
+            plotly::layout(xaxis = list(title = ""),
                    yaxis = list(title = "Monthly plays"),
                    title = str_c("Top ten ", tolower(input$chooseType), " in ", input$chooseYear),
                    legend = list(orientation = "h", xanchor = "center", x = 0.5,
@@ -218,7 +218,7 @@ server <- function(input, output, session) {
                     orientation = "h", colors = "Spectral",
                     hovertext = ~str_c(newCol, n, sep = ": <br>"), hoverinfo = "text"
                     ) %>% 
-            layout(showlegend = FALSE, bargap = 0.5,
+            plotly::layout(showlegend = FALSE, bargap = 0.5,
                    xaxis = list(title = "", zeroline = FALSE),
                    yaxis = list(title = ""),
                    margin = list(l = 120, r = 40))
