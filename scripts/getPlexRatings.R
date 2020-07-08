@@ -11,6 +11,15 @@ getPlexRatings <- function(refresh = FALSE, write = FALSE) {
             magrittr::extract2('MediaContainer') %>% 
             magrittr::extract2('Metadata')
         
+        ## Save a copy of albums/number of tracks?
+        albumCount <- allTracks %>% 
+            map_df(function(x) {
+                as_tibble(x) %>% 
+                    select(any_of(c('grandparentTitle', 'parentTitle')))
+            }) %>% 
+            rename(albumArtist = grandparentTitle, album = parentTitle) %>% 
+            count(albumArtist, album)
+        
         ## Save tracks that have a rating
         rated <- allTracks %>% 
             purrr::discard(function(x) is.null(x$userRating))
@@ -44,9 +53,13 @@ getPlexRatings <- function(refresh = FALSE, write = FALSE) {
     
     
     ratings <- ratedDF %>% group_by(albumArtist, album) %>% 
-        filter(n() > 1) %>% 
-        summarise(avRat = mean(rating)/2) %>% 
-        arrange(desc(avRat))
+        filter(n() > 2) %>% 
+        summarise(avRat = mean(rating)/2, 
+                  n1 = n()) %>% 
+        arrange(desc(avRat)) %>% 
+        left_join(., albumCount) %>% 
+        mutate(n = str_c(n1, "/", n)) %>% 
+        select(-n1)
     print(ratings)
     .GlobalEnv$ratings <- ratings
     
