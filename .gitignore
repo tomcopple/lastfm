@@ -12,3 +12,4 @@ lastfmShiny/.Renviron
 tempfile.csv
 tracks.csv
 lastfmShiny/tracks.csv
+tempData/
