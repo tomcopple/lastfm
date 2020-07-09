@@ -15,7 +15,7 @@ getPlaylist <- function(playCount = 6, lastPlayed = 5, howMany = 25) {
         ##Testing this out - remove everything after a ( or a - in a 
         ## track title, to get rid of (2019 remaster), (demo), (alternate) etc
         mutate(track = str_remove_all(track, "\\s[\\(\\-\\[].*")) %>% 
-        filter(str_detect(artist, "Stars Of The Lid", negate = TRUE),
+        dplyr::filter(str_detect(artist, "Stars Of The Lid", negate = TRUE),
                str_detect(artist, "Eluvium", negate = TRUE),
                str_detect(artist, "Winged Victory", negate = TRUE),
                str_detect(artist, "Inventions", negate = TRUE),
