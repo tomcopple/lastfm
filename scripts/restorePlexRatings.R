@@ -5,7 +5,7 @@ filesRaw <- rdrop2::drop_search('plexRatings')
 
 files <- filesRaw %>% 
     magrittr::extract2('matches') %>% 
-    map_df(extract2, 2) %>% 
+    map_df(magrittr::extract2, 2) %>% 
     magrittr::extract2('name')
 print(files)
 
