@@ -9,11 +9,11 @@ files <- filesRaw %>%
     magrittr::extract2('name')
 print(files)
 
-chooseData <- '2020-07-13'
+chooseData <- '2020-07-22'
 
 
 rdrop2::drop_download(
-    path = str_c('R/lastfm/', chooseData, '-plexRatings.csv'),
+    path = str_c('R/lastfm/', chooseData, '-plexRatings.csv'), overwrite = T,
     local_path = file.path('tempData', 'temp.csv'))
 
 ratings <- read_csv(file.path('tempData', 'temp.csv'))
@@ -36,7 +36,12 @@ allTracks <- content(GET("http://192.168.1.99:32400/library/sections/5/search?ty
 ## Add ratingKey to ratings
 ## Only keep ones where rating != userRating
 combined <- ratings %>% 
-    left_join(allTracks, by = c('albumArtist', 'album', 'track')) %>% 
+    filter(str_detect(artist, 'Wilbury')) %>% 
+    mutate(albumArtist = str_remove_all(albumArtist, 'The '),
+           track = str_to_lower(track)) %>% 
+    left_join(allTracks %>% 
+                  mutate(track = str_to_lower(track)), 
+              by = c('albumArtist', 'album', 'track')) %>% 
     mutate(userRating = replace_na(userRating, 0)) %>% 
     filter(rating != userRating)
     
