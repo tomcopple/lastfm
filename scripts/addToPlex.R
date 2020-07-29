@@ -10,22 +10,17 @@ identity <- content(httr::GET(url = "http://192.168.1.99:32400/identity")) %>%
 slug <- "http://192.168.1.99:32400/playlists/104340/items"
 
 ## Get track rating
-
-trackKey <- '92527'
-
-
-
-queryString <- str_c("server://", identity, "/com.plexapp.plugins.library/library/metadata/", trackKey)
-
-finalPut <- httr::PUT(
-    url = slug,
-    add_headers("X-Plex-Token" = token),
-    query = list(
-        uri = queryString
-        )
-)
-
-lastfm <- getLastfm(F)
+# queryString <- str_c("server://", identity, "/com.plexapp.plugins.library/library/metadata/", trackKey)
+# 
+# finalPut <- httr::PUT(
+#     url = slug,
+#     add_headers("X-Plex-Token" = token),
+#     query = list(
+#         uri = queryString
+#         )
+# )
+# 
+lastfm <- getLastfm(T)
 plex <- getPlex()
 
 playlist <- lastfm %>% 

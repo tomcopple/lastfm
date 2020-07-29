@@ -13,13 +13,14 @@ getPlex <- function() {
         map_df(function(x) {
             as_tibble(x) %>% 
                 select(any_of(c("grandparentTitle", "originalTitle", 
-                                "parentTitle", "title", "userRating")))
+                                "parentTitle", "title", "userRating", "ratingKey")))
         }) %>% 
         select(albumArtist = grandparentTitle, 
                artist = originalTitle, 
                album = parentTitle, 
                track = title, 
-               rating = userRating)
+               rating = userRating,
+               key = ratingKey)
     
     return(ratedDF)
     
