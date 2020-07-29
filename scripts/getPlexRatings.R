@@ -1,6 +1,6 @@
 ## Query Plex API?
 
-getPlexAlbumRatings <- function(refresh = FALSE, write = FALSE, printTree = FALSE) {
+getPlexRatings <- function(refresh = FALSE, write = FALSE, printTree = FALSE) {
     library(tidyverse);library(httr);library(lubridate);library(rdrop2);library(treemapify)
     token <- '2CdDkLKF5xY27xxuxHB5'
     
@@ -30,7 +30,7 @@ getPlexAlbumRatings <- function(refresh = FALSE, write = FALSE, printTree = FALS
                    rating = round(rating / 2) * 2,
                    n = 1) %>% 
             mutate(rating = forcats::as_factor(rating))  
-        treeMap <- ggplot(treemapData, aes(area = n, fill = rating, subgroup = album)) +
+        treemap <- ggplot(treemapData, aes(area = n, fill = rating, subgroup = album)) +
                 geom_treemap() +
                 geom_treemap_subgroup_border(size = 1) +
                 scale_fill_brewer()
@@ -96,3 +96,4 @@ getPlexAlbumRatings <- function(refresh = FALSE, write = FALSE, printTree = FALS
     
     return(ratedDF)
 }
+plex <- getPlexAlbumRatings(T, T, T)
