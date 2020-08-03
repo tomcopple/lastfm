@@ -24,7 +24,7 @@ slug <- "http://192.168.1.99:32400/playlists/104340/items"
 # )
 # 
 lastfm <- getLastfm(T)
-plex <- getPlex()
+plex <- getPlex(refresh = TRUE)
 
 playlist <- lastfm %>% 
     count(artist, track) %>% 
