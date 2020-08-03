@@ -96,4 +96,4 @@ getPlexRatings <- function(refresh = FALSE, write = FALSE, printTree = FALSE) {
     
     return(ratedDF)
 }
-plex <- getPlexAlbumRatings(T, T, T)
+plex <- getPlexRatings(T, T, T)

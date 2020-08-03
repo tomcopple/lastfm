@@ -1,6 +1,9 @@
 ## Try making Plex playlist
 
-library(tidyverse);library(httr);library(lubridate);library(rdrop2);library(treemapify);library(xml2)
+library(tidyverse);library(httr);library(lubridate);library(rdrop2)
+
+source('scripts/getPlex.R')
+source('scripts/getLastfm.R')
 token <- '2CdDkLKF5xY27xxuxHB5'
 
 identity <- content(httr::GET(url = "http://192.168.1.99:32400/identity")) %>% 
@@ -30,7 +33,7 @@ playlist <- lastfm %>%
     filter(is.na(rating)) %>% 
     filter(n > 10) %>% 
     sample_n(size = 25)
-
+playlist
 
 ## Want to delete everything first?
 current <- content(httr::GET(slug, add_headers("X-Plex-Token" = token))) %>% 

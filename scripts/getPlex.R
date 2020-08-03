@@ -9,7 +9,10 @@ getPlex <- function() {
         magrittr::extract2('MediaContainer') %>% 
         magrittr::extract2('Metadata')
     
-    ratedDF <- allTracks %>% 
+    numberOfTracks <- length(allTracks)
+    tenPC <- round(numberOfTracks /10, 0)*10
+    
+    plex <- allTracks %>% 
         map_df(function(x) {
             as_tibble(x) %>% 
                 select(any_of(c("grandparentTitle", "originalTitle", 
@@ -22,7 +25,6 @@ getPlex <- function() {
                rating = userRating,
                key = ratingKey)
     
-    return(ratedDF)
+    return(plex)
     
 }
-plex <- getPlex()
