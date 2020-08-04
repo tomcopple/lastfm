@@ -22,17 +22,17 @@ getPlex <- function(refresh = FALSE) {
                    albumKey    = parentRatingKey
             )
         
-        write.csv(ratedDF, file = "plexDB.csv", 
+        write.csv(allTracks, file = "plexDB.csv", 
                   row.names = FALSE, fileEncoding = "UTF-8")
         rdrop2::drop_upload(file = "plexDB.csv", path = "R/lastfm")
         
-        return(ratedDF)    
+        return(allTracks)    
         
     } else {
         
-        ratedDF <- rdrop2::drop_read_csv(file = "R/lastfm/plexDB.csv") %>% 
+        allTracks <- rdrop2::drop_read_csv(file = "R/lastfm/plexDB.csv") %>% 
             as_tibble()
-        return(ratedDF)
+        return(allTracks)
         
     }
 }
