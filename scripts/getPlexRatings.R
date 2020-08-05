@@ -8,18 +8,8 @@ getPlexRatings <- function(refresh = FALSE, write = FALSE, printTree = FALSE) {
     if(refresh) {
         
         print("Downloading plex data")
-        allTracks <- content(GET("http://192.168.1.99:32400/library/sections/5/search?type=10", 
-                                 add_headers("X-Plex-Token" = token))) %>% 
-            magrittr::extract2('MediaContainer') %>% 
-            magrittr::extract2('Metadata')
-        
-        print("Cleaning data")
-        plex <- allTracks %>% 
-            map_df(function(x) {
-                as_tibble(x) %>% 
-                    select(any_of(c("grandparentTitle", "originalTitle", "parentTitle", "title", "userRating")))
-            }) %>% 
-            select(albumArtist = grandparentTitle, artist = originalTitle, album = parentTitle, track = title, rating = userRating)
+        source('scripts/getPlex.R')
+        plex <- getPlex(refresh = TRUE)
         
         .GlobalEnv$plex <- plex
         

@@ -22,9 +22,10 @@ getPlex <- function(refresh = FALSE) {
                    albumKey    = parentRatingKey
             )
         
-        write.csv(allTracks, file = "plexDB.csv", 
+        write.csv(allTracks, file = here::here('tempData', 'plexDB.csv'), 
                   row.names = FALSE, fileEncoding = "UTF-8")
-        rdrop2::drop_upload(file = "plexDB.csv", path = "R/lastfm")
+        rdrop2::drop_upload(file = here::here('tempData', "plexDB.csv"), 
+                                              path = "R/lastfm")
         
         return(allTracks)    
         

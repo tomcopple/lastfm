@@ -1,5 +1,5 @@
 ## French playlist
-library(tidyverse);library(lubridate);library(stringr);library(httr)
+library(tidyverse);library(lubridate);library(stringr);library(httr);library(spotifyr)
 
 fDates <- c(
     seq.Date(from = dmy("01-10-2019"), to = dmy("06-10-2019"), by = "days"),
@@ -73,26 +73,29 @@ spotAuth <- oauth2.0_token(endpoint = endpoint, app = app,
 
 
 ## Look up and save playlist IDs
-getIDs <- function(track) {
-    print(track)
+getIDs <- function(track, i) {
+    print(str_c(i, ": ", track))
     query <- list(q = track, type = 'track', market = 'GB', limit = 1, access_token = token)
     res <- httr::GET(url = "https://api.spotify.com/v1/search", query = query)
     resContent <- content(res)
     if (resContent$tracks$total > 0) {
         resID <- resContent$tracks$items[[1]]$id
     } else {
-        resID <- "NA"
+        resID <- NA
     }
     return(resID)
 }
-spotIDs <- fDB %>% unite(col = 'tracks', artist, track, sep = " ") %>% 
-    pull(tracks) %>% 
-    map_chr(., getIDs)
-
+fList <- fDB %>% 
+    na.omit() %>% 
+    unite(col = 'tracks', artist, track, sep = " ") %>% 
+    pull(tracks)
+spotIds1 <- fList[c(1:100)] %>%  imap_chr(., getIDs)
+spotIds2 <-  fList[c(101:198)] %>% imap_chr(., getIDs)
+spotIDs <- c(spotIds1, spotIds2)
 
 
 ## Then try to send them all to the playlist
-httr::PUT(url = str_c('https://api.spotify.com/v1/playlists/', playlistID, '/tracks'),
-          body = list(uris = str_c('spotify:track:', na.omit(spotIDs))),
+httr::POST(url = str_c('https://api.spotify.com/v1/playlists/', playlistID, '/tracks'),
+          body = list(uris = str_c('spotify:track:', na.omit(spotIds1))),
           httr::config(token = spotAuth), encode = 'json'
 )
