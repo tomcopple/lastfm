@@ -1,7 +1,8 @@
 library(shiny);library(shinymaterial);library(plotly);library(tidyverse);library(RColorBrewer);
 library(lubridate);library(rdrop2);library(zoo);library(magrittr);library(stringr);library(forcats)
 
-# Define a function to get lastfm data. 
+# Define a function to get lastfm data.
+readRenviron(".Renviron")
 source('getLastfmShiny.R')
 
 refresh = TRUE
@@ -59,8 +60,9 @@ ui <- material_page(
                         input_id = "chooseYear",
                         label = "Select year:",
                         color = "green",
-                        choices = c("All time", seq.int(from = year(max(lastfm$date)), 
-                                          to = year(min(lastfm$date))))
+                        choices = c("All time", "Last 30 days",
+                                    seq.int(from = year(max(lastfm$date)), 
+                                            to = year(min(lastfm$date))))
                     )
                 )
             ),
@@ -139,10 +141,16 @@ server <- function(input, output, session) {
         chooseYear <- input$chooseYear
         chooseType <- input$chooseType
         
-        if(chooseYear == "All time") {
+        if (chooseYear == "All time") {
             top10data <- values$lastfm
             values$minDate <- as_date(min(top10data$date))
             values$maxDate <- as_date(max(top10data$date))
+        } else if (chooseYear == "Last 30 days") {
+            values$minDate <- as_date(today() - days(30))
+            values$maxDate <- as_date(today())
+            top10data <- filter(values$lastfm,
+                                date >= values$minDate)
+            
         } else {
             top10data <- filter(values$lastfm, year(date) == chooseYear)
             values$minDate <- dmy(paste0("01-01-", chooseYear))

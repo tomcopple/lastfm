@@ -17,6 +17,7 @@ getLastfmShiny <- function() {
     # Username and Api key are stored as environmental variables. (?)
     # Not sure how/if this works...
     user <- Sys.getenv('LASTFM_USER')
+    print(user)
     api <- Sys.getenv('LASTFM_APIKEY')
     
     responseDF <- tibble()
