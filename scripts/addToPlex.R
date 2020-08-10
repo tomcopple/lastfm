@@ -29,8 +29,11 @@ plex <- getPlex(refresh = TRUE)
 
 playlist <- lastfm %>% 
     count(artist, track) %>% 
+    ## make everything lower case as removes mis-matches
+    mutate_if(is.character, str_to_lower) %>% 
     right_join(plex %>% 
-                   mutate(artist = ifelse(is.na(artist), albumArtist, artist))) %>% 
+                   mutate(artist = ifelse(is.na(artist), albumArtist, artist)) %>% 
+                   mutate_if(is.character, str_to_lower)) %>% 
     filter(is.na(rating)) %>% 
     filter(n > 10) %>% 
     sample_n(size = 25)

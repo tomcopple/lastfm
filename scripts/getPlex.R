@@ -23,7 +23,9 @@ getPlex <- function(refresh = FALSE) {
                    albumKey    = parentRatingKey,
                 trackNum       = index,
                 discNum        = parentIndex
-            )
+            ) %>% 
+            mutate(artist = ifelse(is.na(artist), albumArtist, artist)) %>% 
+            as_tibble()
         
         write.csv(plex, file = here::here('tempData', 'plexDB.csv'), 
                   row.names = FALSE, fileEncoding = "UTF-8")
