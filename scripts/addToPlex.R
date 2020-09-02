@@ -55,7 +55,7 @@ current %>%
 
 ## Then add playlist
 playlist %>% 
-    magrittr::extract2('key') %>% 
+    dplyr::pull(key) %>% 
     walk(function(x) {
         print(x)
         trackKey <- x

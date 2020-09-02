@@ -47,8 +47,9 @@ getPlexRatings <- function(refresh = FALSE, write = FALSE, printTree = FALSE) {
             filter(!is.na(rating))
         
     } else {
-        ratedDF <- rdrop2::drop_read_csv('R/lastfm/plexMasterRatings.csv') %>% 
-            as_tibble()
+        plex <- getPlex(F)
+        ratedDF <- plex %>% 
+            filter(!is.na(rating))
         
         
     }
@@ -84,6 +85,6 @@ getPlexRatings <- function(refresh = FALSE, write = FALSE, printTree = FALSE) {
     
     
     
-    return(ratedDF)
+    return(plex)
 }
 plex <- getPlexRatings(T, T, T)
