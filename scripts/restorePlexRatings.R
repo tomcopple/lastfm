@@ -67,7 +67,10 @@ sendRating <- function(ratingKey, userRating) {
                   "rating"       = as.character(userRating)))
     if(status_code(req) != 200) {
         print(str_c("Problem with ", ratingKey))
-        .GlobalEnv$issues <- rbind(issues, ratingKey = ratingKey, userRating = userRating)
+        .GlobalEnv$issues <- rbind(issues, tibble(
+            ratingKey = ratingKey, 
+            userRating = userRating
+            ))
     } else if (status_code(req) == 200) {
         print(str_c(ratingKey, " successful"))
     }
