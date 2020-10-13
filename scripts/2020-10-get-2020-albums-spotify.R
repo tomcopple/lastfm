@@ -1,6 +1,6 @@
 ## Check albums/tracks in 2020 playlist and playcounts
 
-library(tidyverse);library(spotifyr)
+library(tidyverse);library(spotifyr);library(httr);library(jsonlite);library(rdrop2)
 source(here::here('scripts', 'getLastfm.R'))
 
 playlistID <- '37zcx3WiFSLso2UZHE7mbl'
@@ -59,8 +59,4 @@ trackCount <- tracks %>%
               by = c('artist_join', 'track_join')) %>% 
     select(!contains('_join'))
 
-saveRDS(trackCount, here::here('tempData', 
-                              str_c(lubridate::today(), "-trackCount.rds")))
-rdrop2::drop_upload(file = here::here('tempData', 
-                                      str_c(lubridate::today(), "-trackCount.rds")),
-                    path = 'R/lastfm/')
+
