@@ -59,4 +59,8 @@ trackCount <- tracks %>%
               by = c('artist_join', 'track_join')) %>% 
     select(!contains('_join'))
 
-saveRDS(trackCount, file = here::here('trackCount.rds'))
+saveRDS(trackCount, here::here('tempData', 
+                              str_c(lubridate::today(), "-trackCount.rds")))
+rdrop2::drop_upload(file = here::here('tempData', 
+                                      str_c(lubridate::today(), "-trackCount.rds")),
+                    path = 'R/lastfm/')
