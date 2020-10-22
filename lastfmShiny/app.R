@@ -1,8 +1,11 @@
 library(shiny);library(shinymaterial);library(plotly);library(tidyverse);library(RColorBrewer);
 library(lubridate);library(rdrop2);library(zoo);library(magrittr);library(stringr);library(forcats)
 
-# Define a function to get lastfm data.
+## NB Need to create a new Renviron file in this folder containing Lastfm API credentials
+## Won't be committed to github so need to recreate 
 readRenviron(".Renviron")
+print(Sys.getenv('LASTFM_USER'))
+
 source('getLastfmShiny.R')
 
 refresh = TRUE
@@ -14,11 +17,16 @@ if(refresh) {
     lastfm <- read_csv("tracks.csv")
 }
 
-artistList <- unique((lastfm %>% distinct(artist, album, track) %>%
-                          filter(album != "", !grepl("unknown", artist)) %>% 
-                          group_by(artist) %>% 
-                          filter(n() > 25) %>% 
-                          arrange(artist))$artist)
+## Get list of artists with more than 25 plays, and ignore 'The' and 'A' at 
+# beginning of name in sorting
+artistList <- lastfm %>% 
+    distinct(artist, track) %>% 
+    count(artist) %>% 
+    filter(n > 25, str_detect(artist, 'unknown', negate = TRUE)) %>% 
+    mutate(arrangeArtist = str_remove_all(artist, '^The |^A ')) %>% 
+    arrange(arrangeArtist) %>% 
+    pull(artist)
+
 
 # options(shiny.autoreload = TRUE)
 # options(shiny.reactlog=TRUE) 

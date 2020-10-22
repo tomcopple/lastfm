@@ -5,8 +5,8 @@ account: tomcopple
 server: shinyapps.io
 hostUrl: https://api.shinyapps.io/v1
 appId: 181512
-bundleId: 3477428
+bundleId: 3770484
 url: https://tomcopple.shinyapps.io/lastfmShiny/
-when: 1596623933.67174
+when: 1603369991.35866
 asMultiple: FALSE
 asStatic: FALSE
