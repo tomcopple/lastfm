@@ -6,6 +6,7 @@ getLastfmShiny <- function() {
     # Change of plan - just use a csv of tracks in Dropbox and read/write from that
     # I'll just have to manually update the Dropbox file occasionally from home.
     dropbox <- readRDS('dropbox.rds')
+    
     rdrop2::drop_download("R/lastfm/tracks.csv", 
                           local_path = "tracks-old.csv", overwrite = TRUE, dtoken = dropbox)
     localData <- readr::read_csv('tracks-old.csv') %>% 

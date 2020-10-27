@@ -1,10 +1,23 @@
-library(shiny);library(shinymaterial);library(plotly);library(tidyverse);library(RColorBrewer);
-library(lubridate);library(rdrop2);library(zoo);library(magrittr);library(stringr);library(forcats)
+# setwd('lastfmShiny')
+getwd()
+# Setup -------------------------------------------------------------------
+
+library(shiny);library(shinymaterial);library(plotly);library(tidyverse);library(RColorBrewer)
+library(lubridate);library(rdrop2);library(zoo);library(stringr);library(forcats)
 
 ## NB Need to create a new Renviron file in this folder containing Lastfm API credentials
 ## Won't be committed to github so need to recreate 
 readRenviron(".Renviron")
 print(Sys.getenv('LASTFM_USER'))
+
+## Import local dropbox token
+dropbox <- readRDS('dropbox.rds')
+
+## Download plex ratings
+rdrop2:::drop_download(path = 'R/lastfm/plexMasterRatings.csv', 
+                       local_path = 'plexMasterRatings.csv', 
+                       overwrite = T)
+ratings <- read_csv('plexMasterRatings.csv')
 
 source('getLastfmShiny.R')
 
@@ -28,8 +41,8 @@ artistList <- lastfm %>%
     pull(artist)
 
 
-# options(shiny.autoreload = TRUE)
-# options(shiny.reactlog=TRUE) 
+
+# UI ----------------------------------------------------------------------
 
 ui <- material_page(
     
@@ -46,6 +59,7 @@ ui <- material_page(
         )
     ),
     
+    # Summary page
     material_tab_content(
         tab_id = "main_page",
         tags$h2("Summary of recent plays"),
@@ -82,6 +96,7 @@ ui <- material_page(
             )
         ),
     
+    # Artist Page
     material_tab_content(
         tab_id = "artist_page",
         material_row(
@@ -115,6 +130,9 @@ ui <- material_page(
                 ),
                 material_row(
                     material_card(title = "", plotlyOutput("albumPlays", height = "100%"))
+                ),
+                material_row(
+                    material_card(title = "", plotlyOutput('albumRatings', height = "100%"))
                 )
             )
         )
@@ -123,11 +141,26 @@ ui <- material_page(
     
 )
 
-# Define server logic required to draw a histogram
+
+# Server ------------------------------------------------------------------
 server <- function(input, output, session) {
-    
+
     values <- reactiveValues()
     values$lastfm <- lastfm
+    
+    # Want to remove as many duplicates and weirdness as possible.
+    # Function to convert every track name and album name to a lowercase slug,
+    # remove punctuation etc.
+    getSlugs <- function(x) {
+        x1 <- stringr::str_to_lower(x)
+        x2 <- stringr::str_replace_all(x1, "&", "and")
+        x3 <- stringr::str_remove_all(x2, "[:punct:]")
+        x4 <- stringr::str_replace_all(x3, "\\s{2,}", " ")
+        x5 <- stringr::str_trim(x4, side = "both")
+        ## Remove anything in brackets, e.g. (remastered) etc
+        x6 <- stringr::str_remove_all(x5, "\\s\\(.*")
+        return(x6)
+    }
     
     observeEvent(input$refresh, {
         if(input$refresh > 0) {
@@ -183,6 +216,9 @@ server <- function(input, output, session) {
             select(newCol, date)
     })
     
+
+# Plotly: Top 10 time series ----------------------------------------------
+
     output$plotlyTime <- renderPlotly({
         
         ## Use the values$top10data, with newCol as the column of interest
@@ -219,6 +255,9 @@ server <- function(input, output, session) {
             
     })
     
+
+# Plotly: Top 10 bar ------------------------------------------------------
+
     output$plotlyBar <- renderPlotly({
         
         ## Just a horizontal bar chart showing totals
@@ -242,18 +281,10 @@ server <- function(input, output, session) {
     })
     
     
-    # Want to remove as many duplicates and weirdness as possible.
-    # Function to convert every track name and album name to a lowercase slug,
-    # remove punctuation etc.
-    getSlugs <- function(x) {
-        x1 <- stringr::str_to_lower(x)
-        x2 <- stringr::str_replace_all(x1, "&", "and")
-        x3 <- stringr::str_replace_all(x2, "[:punct:]", "")
-        x4 <- stringr::str_replace_all(x3, "\\s{2,}", " ")
-        x5 <- stringr::str_trim(x4, side = "both")
-        return(x5)
-    }
     
+
+# Get Artist Dataframe ----------------------------------------------------
+
     ## Filter scrobbles by artist for both graphs
     
     observeEvent(input$chooseArtist, {
@@ -267,7 +298,8 @@ server <- function(input, output, session) {
           mutate(track = getSlugs(track),
                  album = getSlugs(album))
         
-        ## Want to limit each track to one album, just use the most popular (i.e. the one most tracks appear on, excluding NA)
+        ## Want to limit each track to one album, just use the most popular 
+        ## (i.e. the one most tracks appear on, excluding NA)
         albumList <- artistTracks %>% 
           distinct(track, artist, album) %>% 
           na.omit() %>% 
@@ -276,7 +308,7 @@ server <- function(input, output, session) {
           group_by(track) %>% 
           arrange(desc(n)) %>% 
           slice(1) %>% 
-          distinct(track,album) %>% ungroup()
+          distinct(track, album) %>% ungroup()
         
         values$plays <- full_join(artistTracks %>% select(-album),
                                 albumList, by = 'track') %>% 
@@ -291,7 +323,9 @@ server <- function(input, output, session) {
         
     })
         
-    
+
+# Plotly: Artist time series ----------------------------------------------
+
     ## first tab: plotly of tracks over time (rough)
     output$trackPlays <- renderPlotly({
         
@@ -304,8 +338,7 @@ server <- function(input, output, session) {
                 hoverinfo = "text") %>% 
             layout(title = paste("Track plays by", values$chooseArtist),
                    yaxis = list(visible = FALSE),
-                   # autosize = FALSE,
-                   # height = 1000,
+                   ## Fudge to get chart size to adapt to number of albums
                    height = (450 + length(unique(trackPlays$album)) * 10),
                    # For artists with lots of albums, the legend goes crazy, so just ignore it. 
                    legend = list(orientation = "h"), 
@@ -314,12 +347,14 @@ server <- function(input, output, session) {
         
     })
     
-    ## I think this is too fiddly, just going to have a bar chart of album plays
+
+# Plotly: Artist bar ------------------------------------------------------
+
+    ## Just going to have a bar chart of album plays
     output$albumPlays <- renderPlotly({
         
         albumPlays <- values$plays %>%
             count(album) %>%
-            # distinct(albumGroup, n) %>% 
             mutate(albumGroup = forcats::fct_reorder(album, n))
             
         plot_ly(data = albumPlays, x = ~n, y = ~albumGroup, type = "bar",
@@ -330,14 +365,52 @@ server <- function(input, output, session) {
                    bargap = 0.5, barmode = "stack",
                    xaxis = list(title = "", zeroline = FALSE),
                    yaxis = list(title = ""),
-                   # annotations = list(
-                   #     x = ~n, y = ~album, text = ~n, showarrow = FALSE,
-                   #     bgcolor = "white", xanchor = "left"),
+                   ## Another fudge to get margin to adapt to album title length
                    margin = list(l = (max(nchar(as.character(albumPlays$albumGroup)))*6.7)),
                    height = "100%"
                    )
         
         })
+    
+
+# Plotly: Artist Ratings --------------------------------------------------
+
+output$albumRatings <- renderPlotly({
+    
+    ## Want to keep track order; use trackNum if it's there, if not arrange by date scrobbles
+    guessTracks <- values$plays %>% 
+        arrange(date) %>% 
+        group_by(artist, album, track) %>% 
+        slice(1) %>% 
+        group_by(artist, album) %>% 
+        mutate(trackGuess = row_number())
+    allData <- values$plays %>% 
+        left_join(guessTracks, by = c('artist', 'track', 'album')) %>% 
+        distinct(artist, album, track, trackGuess) %>% 
+        left_join(ratings %>% 
+                      mutate(album = getSlugs(album),
+                             track = getSlugs(track)), 
+                  by = c('artist', 'track', 'album')) %>% 
+        mutate(
+            artist = ifelse(is.na(artist), albumArtist, artist),
+            trackNum = ifelse(is.na(trackNum), trackGuess, trackNum)
+        ) %>% 
+        select(artist, album, track, rating, trackNum)
+    
+    ## Try to match up albums, e.g. remove brackets
+    ratingsPlot <- allData %>% 
+        mutate(rating = replace_na(rating, replace = 0),
+               rating = as.factor(rating/2),
+               album = forcats::fct_rev(album))
+    
+    plot_ly(ratingsPlot, y = ~album, x = ~trackNum, color = ~rating, 
+            type = 'scatter', mode = 'markers', 
+            marker = list(size = 20, line = list(color = 'lightgrey', width = 1)),
+            colors = c('#FFFFFF', '#DDE2F9','#B5BEE7','#8C99D6','#6475C4','#3B50B2'), 
+            text = ~str_c(track, rating, sep = ": "), hoverinfo = 'text') %>% 
+        layout(showlegend = FALSE, 
+               yaxis = list(title = NA), xaxis = list(title = NA, zeroline = FALSE))
+    })
 }
 
 
