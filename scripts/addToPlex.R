@@ -36,6 +36,7 @@ playlist <- lastfm %>%
                    mutate_if(is.character, str_to_lower)) %>% 
     filter(is.na(rating)) %>% 
     filter(n > 10) %>% 
+    add_count() %>% 
     sample_n(size = 25)
 playlist
 
@@ -46,7 +47,7 @@ current <- content(httr::GET(slug, add_headers("X-Plex-Token" = token))) %>%
     map_chr(., function(x) {x$ratingKey})
 
 current %>% 
-    map(function(x) {
+    walk(function(x) {
         httr::DELETE(url = slug, add_headers("X-Plex-Token" = token),
                      query = list(
                          ratingKey = x
@@ -57,7 +58,7 @@ current %>%
 playlist %>% 
     dplyr::pull(key) %>% 
     walk(function(x) {
-        print(x)
+        # print(x)
         trackKey <- x
         queryString <- str_c("server://", identity,
                              "/com.plexapp.plugins.library/library/metadata/",
