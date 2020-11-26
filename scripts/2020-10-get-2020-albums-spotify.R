@@ -3,7 +3,9 @@
 library(tidyverse);library(spotifyr);library(httr);library(jsonlite);library(rdrop2)
 source(here::here('scripts', 'getLastfm.R'))
 
-playlistID <- '37zcx3WiFSLso2UZHE7mbl'
+playlistID <- '5vQN8Cq4bbav7Dt31mTwr6'
+
+## New Music id: "5vQN8Cq4bbav7Dt31mTwr6"
 
 ## Spotify authentication
 endpoint <- httr::oauth_endpoint(

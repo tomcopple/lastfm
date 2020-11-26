@@ -9,14 +9,23 @@ pf <- filter(plex, str_detect(album, "Pitchfork.*Tracks"))
 
 pf %>% 
     mutate(year = str_sub(album, -4)) %>% 
-    ggplot(aes(x = trackNum, y = rating, group = year, color = year)) + 
+    mutate(rating = rating/2) %>% 
+    mutate(text = str_c(artist, " - ", track,  " (", year, ")", "<br>", "Rating: ", rating)) %>% 
+    ggplot(aes(x = trackNum, y = rating, group = year, color = year, text = text)) + 
     geom_point(alpha = 0.5) + 
     geom_smooth(se = FALSE, span = 1)
 
-plotly::ggplotly()
+plotly::ggplotly(tooltip = c('text'))
 
 pf %>% group_by(album) %>% summarise(avRat = mean(rating, na.rm = T)) %>% 
     arrange(desc(avRat))
+
+pf %>% 
+    group_by(album) %>% 
+    mutate(nMax = n()) %>% 
+    mutate(rated = ifelse(is.na(rating), FALSE, TRUE)) %>% 
+    mutate(nRat = sum(rated)) %>% 
+    distinct(album, nRat, nMax)
 
 pf %>% filter(!is.na(rating)) %>% count(album,sort = T)
 
