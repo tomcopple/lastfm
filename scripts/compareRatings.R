@@ -30,26 +30,25 @@ pf %>%
 pf %>% filter(!is.na(rating)) %>% count(album,sort = T)
 
 ## Compare albums by artist?
-
-filter(plex, str_detect(artist, "Tom Waits")) %>% 
+compArtist <- 'Damien Jurado'
+filter(plex, str_detect(artist, compArtist)) %>% 
     group_by(album) %>% 
     arrange(album, discNum, trackNum) %>% 
     mutate(trackNum = row_number()) %>% 
     na.omit() %>% 
-    ggplot(aes(x = trackNum, y = rating, group = album, color = album)) +
+    ggplot(aes(x = trackNum, y = rating, group = album, color = album,
+               text = str_c(track, ' (', rating/2, ')'))) +
     geom_point(alpha = 0.5) +
     geom_smooth(se = FALSE, span = 1)
 plotly::ggplotly()
 
-filter(plex, str_detect(artist, "Tom Waits")) %>% 
+filter(plex, str_detect(artist, compArtist)) %>% 
     group_by(album) %>% 
-    arrange(album, discNum, trackNum) %>% 
-    mutate(trackNum = row_number()) %>% 
-    group_by(album) %>% 
-    mutate(x = ifelse(is.na(rating), 0, 1)) %>% 
-    mutate(x = sum(x), y = n()) %>% 
+    mutate(y = n()) %>% 
     na.omit() %>% 
-    group_by(album, x, y) %>% summarise(avRat = mean(rating)) %>% 
-    arrange(desc(avRat))
+    mutate(x = n()) %>% 
+    group_by(album, x, y) %>% summarise(avRat = mean(rating)/2) %>% 
+    arrange(desc(avRat)) %>% 
+    unite(x, y, col = 'n', sep = "/")
 
 plex %>% na.omit() %>% count(artist, sort = T)

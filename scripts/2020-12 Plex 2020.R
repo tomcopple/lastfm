@@ -31,11 +31,11 @@ play20 %>%
     summarise(avRat = mean(rating)/2, 
               n1 = n()) %>% 
     arrange(desc(avRat)) %>% 
-    mutate(n = str_c(n1, "/", n)) %>% 
-    select(-n1)
-
+    unite(n1, n, col = 'n', sep = "/")
+    
 play20 %>% filter(rating > 7)
 
+colPal <- c('#FFFFFF', colorRampPalette(c("#C1D1F4", "#003EBB"))(4))
 
 play20 %>% 
     select(album, rating) %>% 
@@ -46,13 +46,24 @@ play20 %>%
     ggplot(aes(area = n, fill = rating, subgroup = album)) +
     geom_treemap() +
     geom_treemap_subgroup_border(size = 1) +
-    scale_fill_brewer()
+    scale_fill_manual(values = colPal)
+
+play20 %>% 
+    mutate(rating = replace_na(rating, 0)) %>% 
+    mutate(rating = as.factor(rating/2)) %>% 
+    mutate(title = str_c(artist, album, sep = ' - '),
+           title = forcats::fct_rev(title)) %>% 
+    ggplot(aes(x = trackNum, y = title, 
+               fill = rating, group = rating)) +
+    geom_point(shape = 21, size = 5) +
+    scale_fill_manual("", values = colPal) +
+    xlab(NULL) + ylab(NULL)
 
 
 play20 %>% 
     mutate(rating0 = replace_na(rating, 0)/2, 
            rating = rating/2) %>% 
-    mutate(text = str_c(artist, " - ", track, "<br>", "Rating: ", rating)) %>% 
+    mutate(text = str_c(artist, " - ", track, "<br>", "Rating: ", rating0)) %>% 
     ggplot(aes(x = trackNum, y = rating0, group = album, color = album, text = text)) + 
     geom_point(alpha = 0.5) + 
     geom_smooth(se = FALSE, span = 1, aes(y = rating))
