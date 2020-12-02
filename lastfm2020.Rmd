@@ -1,0 +1,23 @@
+---
+title: "2020 in Music"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, error = FALSE, warning = FALSE, message = FALSE)
+library(tidyverse);library(plotly);library(here)
+
+## NB Scripts here can be run to update everything until the end of the year, but eventually probably want to make a local hard copy of all data?
+
+source(here::here('scripts', 'getLastfm.R'))
+source(here::here('scripts', 'getPlex.R'))
+
+lastfm <- getLastfm(T)
+plex <- getPlex(F)
+```
+
+### 1 Most Played
+
+```{r}
+lastfm %>% filter(year(date) == 2020)
+```
