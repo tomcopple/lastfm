@@ -1,5 +1,5 @@
 ---
-title: "Untitled"
+title: "Plex Music 2020"
 output: 
   flexdashboard::flex_dashboard:
     orientation: rows
@@ -7,7 +7,7 @@ output:
 ---
 
 ```{r setup, include=FALSE}
-library(flexdashboard);library(tidyverse);library(httr);library(lubridate);library(treemapify)
+library(flexdashboard);library(tidyverse);library(httr);library(lubridate);library(treemapify);library(plotly)
 token <- '2CdDkLKF5xY27xxuxHB5'
 
 slug <- "http://192.168.1.99:32400/playlists/108695/items"
@@ -31,6 +31,32 @@ play20 <- play20raw %>% select(
     as_tibble()
 ```
 
+Row {data-height=100}
+----
+
+```{r, out.width = "100%", fig.height = 0.5}
+progress <- play20 %>% 
+  summarise(n1 = n(), n2 = sum(!is.na(rating))) %>% 
+  transmute(perc = n2/n1, tot = 1-perc) %>% 
+  gather() %>% rowwise() %>%  
+  mutate(label = ifelse(test = key == 'perc', 
+                        yes = str_c(round(100*value, 0), "%"), no = "")) %>% 
+  ggplot(aes(x = 1, y = value, fill = rev(key), alpha = rev(key))) + 
+  geom_col(position = 'fill', color = "#003EBB", size = 1) + 
+  coord_flip() + 
+  scale_fill_manual(values = (c("#C1D1F4", "#003EBB"))) + 
+  scale_alpha_manual(values = c(0.5, 1)) + 
+  geom_text(aes(label = label, y = value+0.1), size = 3)  + 
+  theme_void()+ 
+  theme(legend.position = 'none', 
+        plot.background = element_rect(fill = 'white', color = 'white'),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank())
+# ggplotly(progress) %>% layout(height=80)
+progress
+```
+
 Row
 -----------------------------------------------------------------------
 
@@ -42,9 +68,11 @@ play20 %>%
     na.omit() %>% 
     group_by(artist, album, n) %>%  
     summarise(avRat = round(mean(rating)/2, 1), 
-              n1 = n()) %>% 
+              n1 = n(), .groups = 'drop') %>% 
     arrange(desc(avRat)) %>% 
     unite(n1, n, col = 'n', sep = "/") %>% 
+  mutate('#' = row_number()) %>% 
+  relocate('#', .before = 'artist') %>% 
     knitr::kable()
 ```
 
