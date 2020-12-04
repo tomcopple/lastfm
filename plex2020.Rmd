@@ -46,7 +46,7 @@ progress <- play20 %>%
   coord_flip() + 
   scale_fill_manual(values = (c("#C1D1F4", "#003EBB"))) + 
   scale_alpha_manual(values = c(0.5, 1)) + 
-  geom_text(aes(label = label, y = value+0.1), size = 3)  + 
+  geom_label(aes(label = label, y = 0.9), size = 3, fill = 'white', label.size = 0)  + 
   theme_void()+ 
   theme(legend.position = 'none', 
         plot.background = element_rect(fill = 'white', color = 'white'),
@@ -140,7 +140,7 @@ play20 %>%
     mutate(text = str_c(artist, " - ", track, "<br>", "Rating: ", rating0)) %>% 
     ggplot(aes(x = trackNum, y = rating0, group = album, color = album, text = text)) + 
     geom_point(alpha = 0.5) + 
-    geom_smooth(se = FALSE, span = 1, aes(y = rating))
+    geom_smooth(se = FALSE, span = 3, aes(y = rating))
 plotly::ggplotly(tooltip = 'text')
 
 ```
