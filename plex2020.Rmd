@@ -67,7 +67,7 @@ play20 %>%
     add_count(artist, album) %>% 
     na.omit() %>% 
     group_by(artist, album, n) %>%  
-    summarise(avRat = round(mean(rating)/2, 1), 
+    summarise(avRat = round(mean(rating)/2, 2), 
               n1 = n(), .groups = 'drop') %>% 
     arrange(desc(avRat)) %>% 
     unite(n1, n, col = 'n', sep = "/") %>% 
