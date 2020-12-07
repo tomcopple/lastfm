@@ -94,18 +94,20 @@ Row
 ### Chart C
 
 ```{r}
-colPal <- c('#FFFFFF', colorRampPalette(c("#C1D1F4", "#003EBB"))(4))
+colPal <- c('#FFFFFF', colorRampPalette(c("#C1D1F4", "#003EBB"))(5))
 
 play20 %>% 
     select(album, rating) %>% 
     mutate(rating = replace_na(rating, 0),
-           rating = round(rating / 2) * 2,
+           rating = rating / 2,
            n = 1) %>% 
     mutate(rating = forcats::as_factor(rating)) %>% 
     ggplot(aes(area = n, fill = rating, subgroup = album)) +
     geom_treemap() +
     geom_treemap_subgroup_border(size = 1) +
-    scale_fill_manual(values = colPal)
+    scale_fill_manual("", values = colPal, 
+                      limits = c(0, 1, 2, 3, 4, 5),
+                      labels = c(0, 1, 2, 3, 4, 5))
 ```
 
 
@@ -121,8 +123,9 @@ play20 %>%
     ggplot(aes(x = trackNum, y = title, 
                fill = rating, group = rating)) +
     geom_point(shape = 21, size = 5) +
-    scale_fill_manual("", values = colPal) +
-    xlab(NULL) + ylab(NULL)
+scale_fill_manual("", values = colPal, 
+                      limits = c(0, 1, 2, 3, 4, 5),
+                      labels = c(0, 1, 2, 3, 4, 5)) +    xlab(NULL) + ylab(NULL)
 
 ```
 
