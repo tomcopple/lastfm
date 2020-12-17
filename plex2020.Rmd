@@ -8,9 +8,9 @@ output:
 
 ```{r setup, include=FALSE}
 library(flexdashboard);library(tidyverse);library(httr);library(lubridate);library(treemapify);library(plotly)
-token <- '2CdDkLKF5xY27xxuxHB5'
+token <- 'ABhPTJsJFC1CsCPKzzhb'
 
-slug <- "http://192.168.1.99:32400/playlists/108695/items"
+slug <- "http://192.168.1.99:32400/playlists/10916/items"
 
 ## Download playlist
 play20raw <- content(httr::GET(slug, add_headers("X-Plex-Token" = token)), type = 'text') %>% 

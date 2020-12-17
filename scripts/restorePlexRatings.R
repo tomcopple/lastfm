@@ -9,7 +9,7 @@ files <- filesRaw %>%
     magrittr::extract2('name')
 print(files)
 
-chooseData <- '2020-07-22'
+chooseData <- '2020-12-07'
 
 
 rdrop2::drop_download(
@@ -20,10 +20,10 @@ ratings <- read_csv(file.path('tempData', 'temp.csv'))
 
 ## Load Plex library and get key identifiers for rated tracks
 
-token <- '2CdDkLKF5xY27xxuxHB5'
+token <- 'ABhPTJsJFC1CsCPKzzhb'
 
 ## Don't both with artist, just keep album artist as easier?
-allTracks <- content(GET("http://192.168.1.99:32400/library/sections/5/search?type=10", 
+allTracks <- content(GET("http://192.168.1.99:32400/library/sections/3/search?type=10", 
                          add_headers("X-Plex-Token" = token))) %>% 
     magrittr::extract2('MediaContainer') %>% 
     magrittr::extract2('Metadata') %>% 
