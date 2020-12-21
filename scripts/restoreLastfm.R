@@ -1,15 +1,12 @@
 # Backup script if you need to restore all scrobbles for some reason
 
-restoreLastfm <- function(env = .GlobalEnv) {
+restoreLastfm <- function(startYear = 2006) {
     library(tidyverse);library(lubridate);library(httr);library(jsonlite)
-    library(readxl)
+    library(rdrop2);library(here)
     
-    basedir <- "~/Dropbox/R/lastfm"
-
-    # Set user = username, api = api_key
-    source("setLastfm.R")
-    user <- setUser()
-    api <- setAPI()
+    # Get credentials from 
+    user <- Sys.getenv('LASTFM_USER')
+    api <- Sys.getenv('LASTFM_APIKEY')
     
     # Set lastfm base url
     baseurl <- paste0(
@@ -17,43 +14,78 @@ restoreLastfm <- function(env = .GlobalEnv) {
         "&api_key=", api, "&format=json&limit=200&page="
     )
     
-    # Initiate data frame
-    restore <- data.frame()
+     
+    ## Find out how many responses in total
+    res1 <- httr::GET(glue::glue("http://ws.audioscrobbler.com/2.0/?method=user.getinfo&user={user}&api_key={api}&format=json"))
+    httr::stop_for_status(res1)
+    howMany <- res1 %>% httr::content() %>% 
+        pluck('user') %>% 
+        pluck('playcount') %>% 
+        as.numeric()
     
+    # Initiate data frame
+    restore <- data.frame(    )
+    
+    # So how many pages to get? Get 200 per page, so 
     # Get 200 per page and need ~120,000 responses, so ~600 pages in total?
     # Find the highest page?
-    pages <- (nrow(lastfm) %/% 200) + 1
+    pages <- ceiling(howMany/200)
+    i <- 1
+    keepgoing = TRUE
     
-    for(i in pages:1) {
+    ## Can also tell function to start in a more recent year
+    while (keepgoing) {
+        url <- str_c(baseurl, i)
         
-        url <- paste0(baseurl, i)
+        print (glue::glue("This may take a while, don't panic... [{i}]"))
         
-        print(paste0(
-            "This might take a couple of minutes, don't panic... [",
-            i, "]"
-        ))  
-        
-        # Send httr GET request and format response
-        restore1 <- httr::GET(url)
-        httr::stop_for_status((restore1))
-        restore2 <- httr::content(restore1, as = "text")
-        restore3 <- fromJSON(restore2, simplifyDataFrame = T, flatten = T)
-        restore4 <- restore3$recenttracks
-        restore5 <- restore4$track
-        
-        restore6 <- select(restore5,
-                           track = name, artist = `artist.#text`, album = `album.#text`) %>% 
-            mutate(date = parse_date_time(restore5$`date.#text`, "d b Y, H:M")) %>% 
+        ## send httr GET request and format response
+        res1 <- httr::GET(url)
+        httr::stop_for_status(res1)
+        res2 <- httr::content(res1, as = 'text')    
+        res3 <- fromJSON(res2, simplifyDataFrame = T, flatten = T) %>% 
+            pluck('recenttracks') %>% 
+            pluck('track')
+        res4 <- res3 %>% 
+            select(track = name, artist = `artist.#text`, album = `album.#text`,
+                   dateRaw = `date.#text`) %>% 
+            mutate(date = parse_date_time(dateRaw, "d b Y, H:M"), .keep = 'unused') %>% 
             filter(!is.na(date)) %>% 
-            as_data_frame()
+            as_tibble()
         
-        # Rbind back to response
-        restore <- rbind(restore, restore6) %>% 
-            arrange(desc(date)) %>% 
-            as_data_frame()
+        restore <- bind_rows(restore, res4) %>% 
+            arrange(desc(date))
+        
+        i <- i + 1
+        
+        if( year(min(restore$date)) < startYear || i == pages) {
+            keepgoing <- FALSE
+        }
+        
     }
     
-write.csv(restore, file = file.path(basedir, "restoreLastfm.csv"), 
-          row.names = FALSE, fileEncoding = "UTF-16LE")
+    restore <- filter(restore, year(date) >= startYear) %>% 
+        as_tibble()
     
+    ## Import current lastfm data
+    source('scripts/getLastfm.R')
+    lastfm <- getLastfm(F)
+    
+    ## And replace with new data
+    newLastfm <- filter(lastfm, date <= min(restore$date)) %>% 
+        bind_rows(restore) %>%
+        arrange(date)
+    
+    ## Save and upload a backup copy and the master copy
+    write.csv(newLastfm, file = here::here('tempData', str_c(today(), '-restoreLastfm.csv')), 
+              row.names = FALSE, fileEncoding = "UTF-8")
+    write.csv(newLastfm, file = 'tracks.csv', 
+              row.names = FALSE, fileEncoding = "UTF-8")
+    
+    
+    rdrop2::drop_upload(file = here::here('tempData', str_c(today(), '-restoreLastfm.csv')),
+                        path = 'R/lastfm')
+    
+    rdrop2::drop_upload(file = 'tracks.csv',
+                        path = 'R/lastfm')
 }
