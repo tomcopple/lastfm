@@ -1,5 +1,6 @@
 ## Restore all ratings
 
+library(tidyverse);library(httr)
 ## Firstly, read in the desired csv
 filesRaw <- rdrop2::drop_search('plexRatings')
 
@@ -36,9 +37,9 @@ allTracks <- content(GET("http://192.168.1.99:32400/library/sections/3/search?ty
 ## Add ratingKey to ratings
 ## Only keep ones where rating != userRating
 combined <- ratings %>% 
-    filter(str_detect(artist, 'Wilbury')) %>% 
-    mutate(albumArtist = str_remove_all(albumArtist, 'The '),
-           track = str_to_lower(track)) %>% 
+    # filter(str_detect(artist, 'Wilbury')) %>% 
+    # mutate(albumArtist = str_remove_all(albumArtist, 'The ')) %>% 
+    mutate(track = str_to_lower(track)) %>% 
     left_join(allTracks %>% 
                   mutate(track = str_to_lower(track)), 
               by = c('albumArtist', 'album', 'track')) %>% 
