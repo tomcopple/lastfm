@@ -11,7 +11,7 @@ identity <- content(httr::GET(url = "http://192.168.1.99:32400/identity")) %>%
     magrittr::extract2('MediaContainer') %>% 
     magrittr::extract2('machineIdentifier')
 
-slug <- "http://192.168.1.99:32400/playlists/104340/items"
+slug <- "http://192.168.1.99:32400/playlists/25891/items"
 
 ## Get track rating
 # queryString <- str_c("server://", identity, "/com.plexapp.plugins.library/library/metadata/", trackKey)
