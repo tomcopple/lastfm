@@ -5,12 +5,12 @@ getPlex <- function(refresh = FALSE) {
     library(tidyverse);library(httr);library(lubridate);library(rdrop2);library(jsonlite)
     
     if (refresh) {
-        token <- '2CdDkLKF5xY27xxuxHB5'
-        plexRaw <- content(GET("http://192.168.1.99:32400/library/sections/5/search?type=10", 
+        token <- 'ABhPTJsJFC1CsCPKzzhb'
+        plexRaw <- content(GET("http://192.168.1.99:32400/library/sections/3/search?type=10", 
                                  add_headers("X-Plex-Token" = token)), type = 'text') %>% 
             jsonlite::fromJSON() %>% 
-            magrittr::extract2('MediaContainer') %>% 
-            magrittr::extract2('Metadata')
+            pluck('MediaContainer') %>% 
+            pluck('Metadata')
         
         plex <- plexRaw %>% select(
                 albumArtist    = grandparentTitle, 
