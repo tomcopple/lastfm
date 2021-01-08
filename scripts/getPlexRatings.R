@@ -35,26 +35,19 @@ getPlexRatings <- function(refresh = FALSE, write = FALSE, printTree = FALSE) {
                             path = 'R/lastfm/')
         
         
-        ## Save a copy of albums/number of tracks?
-        albumCount <- plex %>% 
-            count(albumArtist, album)
         
-        ## Save tracks that have a rating
-        # rated <- allTracks %>% 
-            # purrr::discard(function(x) is.null(x$userRating))
-        
-        ## And keep artist, album, title, ratings
-        ratedDF <- plex %>% 
-            filter(!is.na(rating))
         
     } else {
         plex <- getPlex(F)
-        ratedDF <- plex %>% 
-            filter(!is.na(rating))
-        
-        
     }
     
+    ## Save a copy of albums/number of tracks
+    albumCount <- plex %>% 
+        count(albumArtist, album)
+    
+    ## And save ratings
+    ratedDF <- plex %>% 
+        filter(!is.na(rating))
     
     ## Save one copy date-stamped today, and another master copy
     if(write) {
