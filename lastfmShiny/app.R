@@ -1,5 +1,5 @@
 # setwd('lastfmShiny')
-getwd()
+# getwd()
 # Setup -------------------------------------------------------------------
 
 library(shiny);library(shinymaterial);library(plotly);library(tidyverse);library(RColorBrewer)
@@ -11,7 +11,10 @@ readRenviron(".Renviron")
 print(Sys.getenv('LASTFM_USER'))
 
 ## Import local dropbox token
-dropbox <- readRDS('dropbox.rds')
+# token <- rdrop2::drop_auth()
+# saveRDS(token, 'dropbox.rds')
+rdrop2::drop_auth(rdstoken = 'dropbox.rds')
+
 
 ## Download plex ratings
 rdrop2:::drop_download(path = 'R/lastfm/plexMasterRatings.csv', 
@@ -19,6 +22,13 @@ rdrop2:::drop_download(path = 'R/lastfm/plexMasterRatings.csv',
                        overwrite = T)
 ratings <- read_csv('plexMasterRatings.csv')
 
+rdrop2::drop_download(
+    path = 'R/lastfm/plexDB.csv', 
+    local_path = 'plexDB.csv', 
+    overwrite = T
+)
+
+plexDB <- read_csv('plexDB.csv')
 source('getLastfmShiny.R')
 
 refresh = TRUE
@@ -373,44 +383,35 @@ server <- function(input, output, session) {
         })
     
 
-# Plotly: Artist Ratings --------------------------------------------------
+# Plotly: Album Ratings --------------------------------------------------
 
 output$albumRatings <- renderPlotly({
     
-    ## Want to keep track order; use trackNum if it's there, if not arrange by date scrobbles
-    guessTracks <- values$plays %>% 
-        arrange(date) %>% 
-        group_by(artist, album, track) %>% 
-        slice(1) %>% 
-        group_by(artist, album) %>% 
-        mutate(trackGuess = row_number())
-    allData <- values$plays %>% 
-        left_join(guessTracks, by = c('artist', 'track', 'album')) %>% 
-        distinct(artist, album, track, trackGuess) %>% 
-        left_join(ratings %>% 
-                      mutate(album = getSlugs(album),
-                             track = getSlugs(track)), 
-                  by = c('artist', 'track', 'album')) %>% 
-        mutate(
-            artist = ifelse(is.na(artist), albumArtist, artist),
-            trackNum = ifelse(is.na(trackNum), trackGuess, trackNum)
-        ) %>% 
-        select(artist, album, track, rating, trackNum)
+    if (values$chooseArtist %in% plexDB$artist) {
+        ratingsPlot <- plexDB %>% 
+            filter(artist == values$chooseArtist) %>% 
+            mutate(rating = replace_na(rating, 0),
+                   rating = as.factor(rating/2),
+                   album = forcats::fct_rev(album))
+        
+        plot_ly(ratingsPlot, y = ~album, x = ~trackNum, color = ~rating, 
+                type = 'scatter', mode = 'markers', 
+                marker = list(size = 20, 
+                              line = list(color = 'lightgrey', width = 1)),
+                colors = c('#FFFFFF', '#DDE2F9','#B5BEE7',
+                           '#8C99D6','#6475C4','#3B50B2'), 
+                text = ~str_c(track, rating, sep = ": "), 
+                hoverinfo = 'text') %>% 
+            layout(showlegend = FALSE, 
+                   yaxis = list(title = NA), 
+                   xaxis = list(title = NA, zeroline = FALSE))
     
-    ## Try to match up albums, e.g. remove brackets
-    ratingsPlot <- allData %>% 
-        mutate(rating = replace_na(rating, replace = 0),
-               rating = as.factor(rating/2),
-               album = forcats::fct_rev(album))
+    }
+})
     
-    plot_ly(ratingsPlot, y = ~album, x = ~trackNum, color = ~rating, 
-            type = 'scatter', mode = 'markers', 
-            marker = list(size = 20, line = list(color = 'lightgrey', width = 1)),
-            colors = c('#FFFFFF', '#DDE2F9','#B5BEE7','#8C99D6','#6475C4','#3B50B2'), 
-            text = ~str_c(track, rating, sep = ": "), hoverinfo = 'text') %>% 
-        layout(showlegend = FALSE, 
-               yaxis = list(title = NA), xaxis = list(title = NA, zeroline = FALSE))
-    })
+   
+    
+    
 }
 
 
