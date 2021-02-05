@@ -6,6 +6,7 @@ library(shiny);library(shinymaterial);library(plotly);library(tidyverse);library
 library(lubridate);library(rdrop2);library(zoo);library(stringr);library(forcats)
 
 ## NB Need to create a new Renviron file in this folder containing Lastfm API credentials
+## usethis::edit_r_environ('project') then copy to lastfmShiny folder
 ## Won't be committed to github so need to recreate 
 readRenviron(".Renviron")
 print(Sys.getenv('LASTFM_USER'))
@@ -44,8 +45,9 @@ if(refresh) {
 # beginning of name in sorting
 artistList <- lastfm %>% 
     distinct(artist, track) %>% 
+    mutate(artist = str_to_title(artist)) %>% 
     count(artist) %>% 
-    filter(n > 25, str_detect(artist, 'unknown', negate = TRUE)) %>% 
+    filter(n > 25, str_detect(artist, '[Uu]nknown', negate = TRUE)) %>% 
     mutate(arrangeArtist = str_remove_all(artist, '^The |^A ')) %>% 
     arrange(arrangeArtist) %>% 
     pull(artist)
@@ -142,7 +144,13 @@ ui <- material_page(
                     material_card(title = "", plotlyOutput("albumPlays", height = "100%"))
                 ),
                 material_row(
-                    material_card(title = "", plotlyOutput('albumRatings', height = "100%"))
+                    material_column(
+                                     material_card(title = "", plotlyOutput('albumRatings', height = "100%"))
+                                     ),
+                    material_column(
+                                    material_card(title = "", plotlyOutput('albumRatings2', height = '100%'))
+                                    )
+                    
                 )
             )
         )
@@ -387,19 +395,27 @@ server <- function(input, output, session) {
 
 output$albumRatings <- renderPlotly({
     
-    if (values$chooseArtist %in% plexDB$artist) {
+    if (str_to_lower(values$chooseArtist) %in% str_to_lower(plexDB$artist)) {
         ratingsPlot <- plexDB %>% 
-            filter(artist == values$chooseArtist) %>% 
+            # filter(artist == 'Sault') %>% 
+            filter(str_to_lower(artist) == str_to_lower(values$chooseArtist)) %>%
+             group_by(album) %>% 
+            add_count() %>% 
+            filter(n > 1) %>% 
+            ungroup() %>% 
+            select(-n) %>% 
             mutate(rating = replace_na(rating, 0),
                    rating = as.factor(rating/2),
                    album = forcats::fct_rev(album))
         
-        plot_ly(ratingsPlot, y = ~album, x = ~trackNum, color = ~rating, 
+        colors <- c('#FFFFFF', '#DDE2F9','#B5BEE7',
+                   '#8C99D6','#6475C4','#3B50B2')
+        
+        plot_ly(ratingsPlot, y = ~album, x = ~trackNum, 
                 type = 'scatter', mode = 'markers', 
                 marker = list(size = 20, 
-                              line = list(color = 'lightgrey', width = 1)),
-                colors = c('#FFFFFF', '#DDE2F9','#B5BEE7',
-                           '#8C99D6','#6475C4','#3B50B2'), 
+                              line = list(color = 'lightgrey', width = 1),
+                              color = ~colors[as.numeric(as.character(rating))+1]),
                 text = ~str_c(track, rating, sep = ": "), 
                 hoverinfo = 'text') %>% 
             layout(showlegend = FALSE, 
@@ -408,6 +424,31 @@ output$albumRatings <- renderPlotly({
     
     }
 })
+    
+    output$albumRatings2 <- renderPlotly({
+        if (str_to_lower(values$chooseArtist) %in% str_to_lower(plexDB$artist)) {
+            ratingsPlot2 <- plexDB %>% 
+                filter(str_to_lower(artist) == str_to_lower(values$chooseArtist)) %>%
+                na.omit() %>% 
+                group_by(album) %>% 
+                mutate(rating = rating/2) %>% 
+                mutate(avRat = mean(rating)) %>% 
+                mutate(albumLegend = str_c(album, ' (', round(avRat, 1), ')')) %>%
+                add_count() %>% 
+                mutate(smooth = ifelse(n > 3,
+                                       predict(loess(rating ~ trackNum, span = 3)),
+                                       avRat))
+            
+            plot_ly(ratingsPlot2, x = ~trackNum, y = ~smooth, type = 'scatter', mode = 'lines',
+                    color = ~albumLegend, legendgroup = ~albumLegend,
+                    text = ~albumLegend, hoverinfo = 'text') %>% 
+                add_markers(y = ~rating, showlegend = FALSE, legendgroup = ~albumLegend,
+                            text = ~str_c(track, ' (', rating, ')<br>', albumLegend),
+                                          opacity = 0.5) %>%
+                plotly::layout(xaxis = list(title = NA, zeroline = FALSE),
+                               yaxis = list(title = NA))
+        }
+    })
     
    
     
