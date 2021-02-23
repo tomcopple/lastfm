@@ -5,6 +5,9 @@ plex <- getPlex(T)
 
 ## Let's look at all the Pitchforks
 
+# Pitchforks --------------------------------------------------------------
+
+
 pf <- filter(plex, str_detect(album, "Pitchfork.*Tracks"))
 
 pf %>% 
@@ -29,9 +32,13 @@ pf %>%
 
 pf %>% filter(!is.na(rating)) %>% count(album,sort = T)
 
+
+# Albums by Artist --------------------------------------------------------
+
 ## Compare albums by artist?
-compArtist <- 'Damien Jurado'
-filter(plex, str_detect(artist, compArtist)) %>% 
+compArtist <- 'The Field'
+plexArtist <- filter(plex, str_detect(artist, compArtist)) 
+plexArtist %>% 
     group_by(album) %>% 
     arrange(album, discNum, trackNum) %>% 
     mutate(trackNum = row_number()) %>% 
@@ -42,7 +49,33 @@ filter(plex, str_detect(artist, compArtist)) %>%
     geom_smooth(se = FALSE, span = 1)
 plotly::ggplotly()
 
-filter(plex, str_detect(artist, compArtist)) %>% 
+
+colors <- c('#FFFFFF', '#DDE2F9','#B5BEE7',
+            '#8C99D6','#6475C4','#3B50B2')
+
+
+plexArtist %>% 
+    # group_by(album) %>% 
+    # add_count() %>% 
+    # filter(n > 1) %>% 
+    # ungroup() %>% 
+    # select(-n) %>% 
+    mutate(rating = replace_na(rating, 0),
+           rating = as.factor(rating/2),
+           album = forcats::fct_rev(album)) %>% 
+    plotly::plot_ly(y = ~album, x = ~trackNum, 
+        type = 'scatter', mode = 'markers', 
+        marker = list(size = 20, 
+                      line = list(color = 'lightgrey', width = 1),
+                      color = ~colors[as.numeric(as.character(rating))+1]),
+        text = ~str_c(track, rating, sep = ": "), 
+        hoverinfo = 'text') %>% 
+    plotly::layout(showlegend = FALSE, 
+           yaxis = list(title = NA), 
+           xaxis = list(title = NA, zeroline = FALSE))
+
+
+plexArtist %>% 
     group_by(album) %>% 
     mutate(y = n()) %>% 
     na.omit() %>% 
@@ -51,4 +84,3 @@ filter(plex, str_detect(artist, compArtist)) %>%
     arrange(desc(avRat)) %>% 
     unite(x, y, col = 'n', sep = "/")
 
-plex %>% na.omit() %>% count(artist, sort = T)
