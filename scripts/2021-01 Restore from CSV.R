@@ -11,6 +11,7 @@
 library(tidyverse);library(lubridate)
 
 ## Import old data for comparison
+source('scripts/getLastfm.R')
 lastOld <- getLastfm(F)
 
 ## Import new files
@@ -26,6 +27,7 @@ lastNew <- bind_rows(lastNew1, lastNew2, lastNew3) %>%
 ## NB Duplicates here
 lastOld %>% group_by(track, artist, album, date) %>% 
     filter(n() > 1)
+
 
 full_join(
     lastNew %>% count(date(date), name = 'new'),

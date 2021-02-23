@@ -317,6 +317,7 @@ server <- function(input, output, session) {
                  album = getSlugs(album))
         
         ## Want to limit each track to one album, just use the most popular 
+        ## Actually maybe don't want to do this?
         ## (i.e. the one most tracks appear on, excluding NA)
         albumList <- artistTracks %>% 
           distinct(track, artist, album) %>% 
@@ -326,11 +327,13 @@ server <- function(input, output, session) {
           group_by(track) %>% 
           arrange(desc(n)) %>% 
           slice(1) %>% 
-          distinct(track, album) %>% ungroup()
+          distinct(track, album) %>% ungroup() %>% 
+            rename(album2 = album)
         
-        values$plays <- full_join(artistTracks %>% select(-album),
+        values$plays <- full_join(artistTracks,
                                 albumList, by = 'track') %>% 
-          mutate(album = ifelse(is.na(album) | album == '',
+            mutate(album = ifelse(is.na(album) | album == '', album2, album)) %>% 
+            mutate(album = ifelse(is.na(album) | album == '',
                                 'others', album)) %>% 
           add_count(album) %>%
           mutate(album = ifelse(n < 9, 'others', album)) %>% 
