@@ -12,6 +12,7 @@ identity <- content(httr::GET(url = "http://192.168.1.99:32400/identity")) %>%
     magrittr::extract2('machineIdentifier')
 
 slug <- "http://192.168.1.99:32400/playlists/25891/items"
+slug2 <- "http://192.168.1.99:32400/playlists/28969/items"
 
 ## Get track rating
 # queryString <- str_c("server://", identity, "/com.plexapp.plugins.library/library/metadata/", trackKey)
@@ -26,6 +27,11 @@ slug <- "http://192.168.1.99:32400/playlists/25891/items"
 # 
 lastfm <- getLastfm(F)
 plex <- getPlex(refresh = TRUE)
+
+
+
+# Ratings -----------------------------------------------------------------
+
 
 playlist <- lastfm %>% 
     count(artist, track) %>% 
@@ -66,6 +72,52 @@ playlist %>%
 
         finalPut <- httr::PUT(
             url = slug,
+            add_headers("X-Plex-Token" = token),
+            query = list(
+                uri = queryString
+            )
+        )
+    })
+
+
+# Completion --------------------------------------------------------------
+
+nearlyComplete <- plex %>% 
+    group_by(albumArtist, album) %>% 
+    add_count(name = 'y') %>% 
+    filter(is.na(rating)) %>% 
+    add_count(name = 'x') %>% 
+    ungroup() %>% 
+    filter(y > 1) %>% 
+    arrange(x) %>% 
+    slice(1:25)
+
+## Want to delete everything first?
+current <- content(httr::GET(slug2, add_headers("X-Plex-Token" = token))) %>% 
+    magrittr::extract2('MediaContainer') %>% 
+    magrittr::extract2('Metadata') %>% 
+    map_chr(., function(x) {x$ratingKey})
+
+current %>% 
+    walk(function(x) {
+        httr::DELETE(url = slug2, add_headers("X-Plex-Token" = token),
+                     query = list(
+                         ratingKey = x
+                     ))
+    })
+
+## Then add playlist
+nearlyComplete %>% 
+    dplyr::pull(key) %>% 
+    walk(function(x) {
+        # print(x)
+        trackKey <- x
+        queryString <- str_c("server://", identity,
+                             "/com.plexapp.plugins.library/library/metadata/",
+                             trackKey)
+        
+        finalPut <- httr::PUT(
+            url = slug2,
             add_headers("X-Plex-Token" = token),
             query = list(
                 uri = queryString
