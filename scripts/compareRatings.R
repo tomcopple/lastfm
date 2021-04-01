@@ -36,7 +36,7 @@ pf %>% filter(!is.na(rating)) %>% count(album,sort = T)
 # Albums by Artist --------------------------------------------------------
 
 ## Compare albums by artist?
-compArtist <- 'The Antlers'
+compArtist <- "Period"
 plexArtist <- filter(plex, str_detect(artist, compArtist)) 
 plexArtist %>% 
     group_by(album) %>% 
@@ -96,7 +96,7 @@ albumList <- plex %>%
     summarise(avRat = mean(rating)/2, .groups = 'drop') %>% 
     arrange(desc(avRat))
 albumList %>%
-    mutate(highlight = albumArtist == compArtist) %>% 
+    mutate(highlight = str_detect(albumArtist, compArtist)) %>% 
     unite(col = 'name', albumArtist:album, sep = " - ") %>% 
     mutate(name = forcats::fct_rev(forcats::fct_inorder(name))) %>% 
     ggplot(aes(y = avRat, x = name, fill = highlight)) + 
