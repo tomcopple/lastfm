@@ -88,8 +88,9 @@ nearlyComplete <- plex %>%
     filter(is.na(rating)) %>% 
     add_count(name = 'x') %>% 
     ungroup() %>% 
-    filter(y > 1) %>% 
+    filter(y > 3) %>% 
     arrange(x) %>% 
+    distinct(artist, .keep_all = TRUE) %>% 
     slice(1:25)
 
 ## Want to delete everything first?
