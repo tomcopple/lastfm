@@ -24,10 +24,6 @@ lastNew <- bind_rows(lastNew1, lastNew2, lastNew3) %>%
     mutate(date = lubridate::dmy_hm(date)) %>% 
     distinct(track, artist, album, date)
 
-## NB Duplicates here
-lastOld %>% group_by(track, artist, album, date) %>% 
-    filter(n() > 1)
-
 
 full_join(
     lastNew %>% count(date(date), name = 'new'),
