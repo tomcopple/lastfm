@@ -11,3 +11,4 @@ lastfmShiny/.Renviron
 tempData/
 *.html
 *.csv
+.DS_Store
