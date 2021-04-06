@@ -41,37 +41,32 @@ getPlexRatings <- function(refresh = FALSE, write = FALSE, printTree = FALSE) {
         plex <- getPlex(F)
     }
     
-    ## Save a copy of albums/number of tracks
-    albumCount <- plex %>% 
-        count(albumArtist, album)
-    
     ## And save ratings
     ratedDF <- plex %>% 
         filter(!is.na(rating))
     
-    ## Save one copy date-stamped today, and another master copy
+    ## Save master copy of ratings
     if(write) {
         print("Saving backup copy of data")
-        write_csv(ratedDF, here::here('tempData', 
-                                      str_c(lubridate::today(), "-plexRatings.csv")))
-        rdrop2::drop_upload(file = here::here('tempData', 
-                                              str_c(lubridate::today(), "-plexRatings.csv")),
-                            path = 'R/lastfm/')
-        
         write_csv(ratedDF, here::here('tempData', 'plexMasterRatings.csv'))
         rdrop2::drop_upload(file = here::here('tempData', 'plexMasterRatings.csv'), 
                             path = 'R/lastfm/')
         
     }
         
-    ratings <- ratedDF %>% group_by(albumArtist, album) %>% 
-            filter(n() > 2) %>% 
-            summarise(avRat = mean(rating)/2, 
-                      n1 = n()) %>% 
-            arrange(desc(avRat)) %>% 
-            left_join(., albumCount) %>% 
-            mutate(n = str_c(n1, "/", n)) %>% 
-            select(-n1)
+    ratings <- plex %>% 
+        group_by(albumArtist, album) %>% 
+        add_count(name = 'y') %>% 
+        filter(y > 2, !is.na(rating)) %>% 
+        add_count(name = 'x') %>% 
+        filter(x > 2) %>% 
+        group_by(albumArtist, album, x, y) %>% 
+        summarise(avRat = mean(rating)/2, .groups = 'drop') %>% 
+        unite(col = 'n', sep = '/', remove = FALSE, c(x, y)) %>% 
+        arrange(desc(avRat))
+        
+        
+        
         print(ratings)
         .GlobalEnv$albumRatings <- ratings
 
@@ -84,5 +79,4 @@ getPlexRatings <- function(refresh = FALSE, write = FALSE, printTree = FALSE) {
 plex <- getPlexRatings(T, T, T)
 
 albumRatings %>% 
-    separate(n, into = c('x', 'y'), sep = '/') %>% 
-    filter(x == y)
+    filter(x != y)
