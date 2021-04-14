@@ -57,7 +57,7 @@ getPlexRatings <- function(refresh = FALSE, write = FALSE, printTree = FALSE) {
     ratings <- plex %>% 
         group_by(albumArtist, album) %>% 
         add_count(name = 'y') %>% 
-        filter(y > 2, !is.na(rating)) %>% 
+        filter(y > 3, !is.na(rating)) %>% 
         add_count(name = 'x') %>% 
         filter(x > 2) %>% 
         group_by(albumArtist, album, x, y) %>% 
