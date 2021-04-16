@@ -36,8 +36,9 @@ pf %>% filter(!is.na(rating)) %>% count(album,sort = T)
 # Albums by Artist --------------------------------------------------------
 
 ## Compare albums by artist?
-compArtist <- "Period"
-plexArtist <- filter(plex, str_detect(artist, compArtist)) 
+compArtist <- "Girls"
+plexArtist <- filter(plex, str_detect(artist, compArtist)) %>% 
+    filter(albumArtist != "Various Artists")
 plexArtist %>% 
     group_by(album) %>% 
     arrange(album, discNum, trackNum) %>% 
@@ -60,9 +61,10 @@ plexArtist %>%
     # filter(n > 1) %>% 
     # ungroup() %>% 
     # select(-n) %>% 
+    mutate(album = ifelse(discNum == 1, album, str_c(album, " (", discNum, ")"))) %>% 
     mutate(rating = replace_na(rating, 0),
            rating = as.factor(rating/2),
-           album = forcats::fct_rev(album)) %>% 
+           album = forcats::fct_rev(album)) %>%
     plotly::plot_ly(y = ~album, x = ~trackNum, 
         type = 'scatter', mode = 'markers', 
         marker = list(size = 20, 
