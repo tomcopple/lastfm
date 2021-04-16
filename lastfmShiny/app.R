@@ -312,7 +312,7 @@ server <- function(input, output, session) {
         )
         
         artistTracks <- values$lastfm %>% 
-          filter(artist == values$chooseArtist) %>% 
+          filter(str_to_lower(artist) == str_to_lower(values$chooseArtist)) %>% 
           mutate(track = getSlugs(track),
                  album = getSlugs(album))
         
@@ -402,11 +402,13 @@ output$albumRatings <- renderPlotly({
         ratingsPlot <- plexDB %>% 
             # filter(artist == 'Sault') %>% 
             filter(str_to_lower(artist) == str_to_lower(values$chooseArtist)) %>%
+            filter(albumArtist != "Various Artists") %>% 
              group_by(album) %>% 
             add_count() %>% 
             filter(n > 1) %>% 
             ungroup() %>% 
             select(-n) %>% 
+            mutate(album = ifelse(discNum == 1, album, str_c(album, " (", discNum, ")"))) %>% 
             mutate(rating = replace_na(rating, 0),
                    rating = as.factor(rating/2),
                    album = forcats::fct_rev(album))
@@ -421,7 +423,7 @@ output$albumRatings <- renderPlotly({
                               color = ~colors[as.numeric(as.character(rating))+1]),
                 text = ~str_c(track, rating, sep = ": "), 
                 hoverinfo = 'text') %>% 
-            layout(showlegend = FALSE, 
+            plotly::layout(showlegend = FALSE, 
                    yaxis = list(title = NA), 
                    xaxis = list(title = NA, zeroline = FALSE))
     
@@ -432,7 +434,9 @@ output$albumRatings <- renderPlotly({
         if (str_to_lower(values$chooseArtist) %in% str_to_lower(plexDB$artist)) {
             ratingsPlot2 <- plexDB %>% 
                 filter(str_to_lower(artist) == str_to_lower(values$chooseArtist)) %>%
+                filter(albumArtist != "Various Artists") %>% 
                 na.omit() %>% 
+                mutate(album = ifelse(discNum == 1, album, str_c(album, " (", discNum, ")"))) %>% 
                 group_by(album) %>% 
                 mutate(rating = rating/2) %>% 
                 mutate(avRat = mean(rating)) %>% 
