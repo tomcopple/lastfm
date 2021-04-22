@@ -219,9 +219,14 @@ server <- function(input, output, session) {
         ## For tracks and albums, combine with artists first (as newCol). 
         if (chooseType == "Artists") {
             top10data <- mutate(top10data, newCol = str_to_title(artist))
+        } else if (chooseType == 'Albums') {
+            top10data <- top10data %>% 
+                na.omit() %>% 
+                unite(col = 'newCol', sep = ' - ', c('artist', 'album')) %>%
+                mutate(newCol = str_to_title(newCol))
         } else {
             top10data <- unite(top10data, col = "newCol", sep = " - ",
-                               c("artist", str_to_lower(str_sub(chooseType, 0, -2)))) %>% 
+                               c("artist", 'track')) %>% 
                 mutate(newCol = str_to_title(newCol))
         }
         
