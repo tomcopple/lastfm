@@ -96,7 +96,7 @@ Row
 ```{r}
 source('scripts/getLastfm.R')
 tracks <- getLastfm(T)
-tracks %>% filter(date >= "2020-1-01") %>% 
+tracks %>% filter(year(date) == 2020) %>% 
   count(artist, album, sort = TRUE) %>% 
   na.omit() %>% 
   mutate(plex = ifelse(str_to_lower(artist) %in% str_to_lower(play20$artist) &

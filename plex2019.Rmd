@@ -1,5 +1,5 @@
 ---
-title: "Plex Music 2021"
+title: "Plex Music 2019"
 output: 
   flexdashboard::flex_dashboard:
     orientation: rows
@@ -10,14 +10,14 @@ output:
 library(flexdashboard);library(tidyverse);library(httr);library(lubridate);library(treemapify);library(plotly)
 token <- 'ABhPTJsJFC1CsCPKzzhb'
 
-slug <- "http://192.168.1.99:32400/playlists/29523/items"
+slug <- "http://192.168.1.99:32400/playlists/29598/items"
 
 ## Download playlist
-play21raw <- content(httr::GET(slug, add_headers("X-Plex-Token" = token)), type = 'text') %>% 
+play19raw <- content(httr::GET(slug, add_headers("X-Plex-Token" = token)), type = 'text') %>% 
     jsonlite::fromJSON() %>% 
     magrittr::extract2('MediaContainer') %>% 
     magrittr::extract2('Metadata')
-play21 <- play21raw %>% select(
+play19 <- play19raw %>% select(
     artist    = grandparentTitle, 
     album       = parentTitle, 
     track       = title, 
@@ -31,15 +31,15 @@ play21 <- play21raw %>% select(
     as_tibble() %>% 
   unite(col = 'lowerAlbum', artist, album, sep = " - ", remove = FALSE) %>% 
   unite(col = "lowerTrack", artist, track, sep = " - ", remove = FALSE) %>% 
-  mutate(lowerAlbum = str_to_lower(lowerAlbum), 
-         lowerTrack = str_to_lower(lowerTrack))
+  mutate(lowerAlbum = str_remove_all(str_to_lower(lowerAlbum), "[[:punct:]]"), 
+         lowerTrack = str_remove_all(str_to_lower(lowerTrack), "[[:punct:]]"))
 ```
 
 Row {data-height=100}
 ----
 
 ```{r, out.width = "100%", fig.height = 0.5}
-progress <- play21 %>% 
+progress <- play19 %>% 
   summarise(n1 = n(), n2 = sum(!is.na(rating))) %>% 
   transmute(perc = n2/n1, tot = 1-perc) %>% 
   gather() %>% rowwise() %>%  
@@ -67,7 +67,7 @@ Row
 ### All albums
 
 ```{r}
-play21 %>% 
+play19 %>% 
     add_count(artist, album) %>% 
     na.omit() %>% 
     group_by(artist, album, n) %>%  
@@ -86,7 +86,7 @@ play21 %>%
 <!-- ### Top songs so far -->
 
 <!-- ```{r} -->
-<!-- play21 %>% -->
+<!-- play19 %>% -->
 <!--     select(artist, album, track, rating) %>%  -->
 <!--     filter(rating > 7) %>% knitr::kable() -->
 
@@ -103,27 +103,28 @@ source('scripts/getPlex.R')
 plex <- getPlex(T) %>% 
   unite(col = 'lowerAlbum', artist, album, sep = " - ", remove = FALSE) %>% 
   unite(col = "lowerTrack", artist, track, sep = " - ", remove = FALSE) %>% 
-  mutate(lowerAlbum = str_to_lower(lowerAlbum),
-         lowerTrack = str_to_lower(lowerTrack))
-tracks <- getLastfm(T) %>% filter(date >= "2021-1-01")
+  mutate(lowerAlbum = str_remove_all(str_to_lower(lowerAlbum), "[[:punct:]]"),
+         lowerTrack = str_remove_all(str_to_lower(lowerTrack), "[[:punct:]]"))
+tracks <- getLastfm(T) %>% filter(year(date) == 2019)
 
 tracks %>% count(artist, album, sort = TRUE) %>% 
   na.omit() %>% 
   unite(col = "lower", artist, album, sep = " - ", remove = FALSE) %>% 
-  mutate(lower = str_to_lower(lower)) %>% 
+  mutate(lower = str_remove_all(str_to_lower(lower), "[[:punct:]]")) %>% 
   mutate(inPlex = case_when(
-    lower %in% play21$lowerAlbum ~ 2,
+    lower %in% play19$lowerAlbum ~ 2,
     lower %in% plex$lowerAlbum ~ 1,
     TRUE ~ 0)) %>% 
   mutate(
     inPlex = forcats::as_factor(inPlex),
     rank = row_number()) %>%
-  group_by(inPlex) %>% 
   ## No idea what this does, why not just top 25?
-  mutate(z = max(rank)) %>% 
-  ungroup() %>% 
-  mutate(z = ifelse(min(z) < 25, 25, min(z))) %>% 
-  filter(rank <= z) %>% 
+  # group_by(inPlex) %>% 
+  # mutate(z = max(rank)) %>% 
+  # ungroup() %>% 
+  # mutate(z = ifelse(min(z) < 25, 25, min(z))) %>% 
+  # filter(rank <= z) %>% 
+  slice(1:25) %>% 
   unite(col = 'name', artist, album, sep = " - ") %>% 
   mutate(nchar = nchar(name)) %>% 
   mutate(name = ifelse(nchar > 47, str_c(str_sub(name, 0, 47), "..."), name)) %>% 
@@ -149,19 +150,19 @@ tracks %>%
   slice_head(n = 50) %>% 
   na.omit() %>% 
    unite(col = "lower", artist, track, sep = " - ", remove = FALSE) %>% 
-  mutate(lower = str_to_lower(lower)) %>% 
+  mutate(lower = str_remove_all(str_to_lower(lower), "[[:punct:]]")) %>% 
   mutate(inPlex = case_when(
-    lower %in% play21$lowerTrack ~ 2,
+    lower %in% play19$lowerTrack ~ 2,
     lower %in% plex$lowerTrack ~ 1,
     TRUE ~ 0)) %>% 
   mutate(
     inPlex = forcats::as_factor(inPlex),
     rank = row_number()) %>%
-  group_by(inPlex) %>% 
-  mutate(z = max(rank)) %>% 
-  ungroup() %>% 
-  mutate(z = min(z)) %>% 
-  filter(rank <= z) %>% 
+  # group_by(inPlex) %>% 
+  # mutate(z = max(rank)) %>% 
+  # ungroup() %>% 
+  # mutate(z = min(z)) %>% 
+  # filter(rank <= z) %>% 
   unite(col = 'name', artist, track, sep = " - ") %>% 
   mutate(nchar = nchar(name)) %>% 
   mutate(name = ifelse(nchar > 47, str_c(str_sub(name, 0, 47), "..."), name)) %>% 
@@ -183,11 +184,14 @@ Row
 
 ```{r}
 colPal <- c('#FFFFFF', colorRampPalette(c("#C1D1F4", "#003EBB"))(5))
-play21 %>%
+play19 %>%
   mutate(album = ifelse(nchar(album) > 15, 
                             str_c(str_sub(album, 0, 13), "..."),
                             album)) %>%
-    mutate(rating = replace_na(rating, 0)) %>%
+    mutate(artist = ifelse(nchar(artist) > 15, 
+                            str_c(str_sub(artist, 0, 13), "..."),
+                            artist)) %>%
+  mutate(rating = replace_na(rating, 0)) %>%
     mutate(rating = as.factor(rating/2)) %>%
     mutate(title = str_c(artist, album, sep = ' - '),
            title = forcats::fct_rev(title)) %>%
@@ -206,7 +210,7 @@ scale_fill_manual("", values = colPal,
 ### Ratings 2
 
 ```{r}
-play21 %>% 
+play19 %>% 
   mutate(album = ifelse(nchar(album) > 15, 
                             str_c(str_sub(album, 0, 13), "..."),
                             album)) %>%
