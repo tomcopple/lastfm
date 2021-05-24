@@ -5,8 +5,10 @@ source('scripts/getPlex.R')
 
 lastfm <- getLastfm(T)
 plex <- getPlex(T)
-l1 <- lastfm %>% mutate_if(is.character, str_to_lower)
-p1 <- plex %>% mutate_if(is.character, str_to_lower)
+l1 <- lastfm %>% mutate_if(is.character, str_to_lower) %>% 
+    mutate_if(.predicate = is.character, .funs = function(x) str_remove_all(x, "[[:punct:]]"))
+p1 <- plex %>% mutate_if(is.character, str_to_lower) %>% 
+    mutate_if(.predicate = is.character, .funs = function(x) str_remove_all(x, "[[:punct:]]"))
 
 # Plex tracks with no plays -----------------------------------------------
 
