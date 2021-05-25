@@ -37,6 +37,7 @@ rdrop2::drop_download(path = 'R/lastfm/plexDB.csv',
 
 plexDB <- read_csv('plexDB.csv')
 source('getLastfmShiny.R')
+source('getSlugs.R')
 
 refresh = TRUE
 
@@ -74,12 +75,14 @@ ui <- material_page(
     "Artist page" = "artist_page"
   )),
   
-  # Summary page
+  # * Main page ----
   material_tab_content(
     tab_id = "main_page",
     tags$h2("Summary of recent plays"),
     
     material_row(
+      
+      # * * Input column ---- 
       material_column(
         width = 3,
         material_card(
@@ -105,6 +108,7 @@ ui <- material_page(
           )
         )
       ),
+      # * * Plotly graphs ---- 
       material_column(
         width = 9,
         material_card(
@@ -112,7 +116,16 @@ ui <- material_page(
           ),
         material_card(
           title = "", plotlyOutput("plotlyBar", height = "100%")
-          )
+          ),
+        material_row(
+          material_column(material_card(
+            title = "", plotlyOutput('yearRatings', height = "100%")
+          )),
+          material_column(material_card(
+            title = "", plotlyOutput('yearRatings2', height = '100%')
+          ))
+          
+        )
       )
     )
   ),
@@ -169,20 +182,6 @@ ui <- material_page(
 server <- function(input, output, session) {
   values <- reactiveValues()
   values$lastfm <- lastfm
-  
-  # Want to remove as many duplicates and weirdness as possible.
-  # Function to convert every track name and album name to a lowercase slug,
-  # remove punctuation etc.
-  getSlugs <- function(x) {
-    x1 <- stringr::str_to_lower(x)
-    x2 <- stringr::str_replace_all(x1, "&", "and")
-    x3 <- stringr::str_remove_all(x2, "[:punct:]")
-    x4 <- stringr::str_replace_all(x3, "\\s{2,}", " ")
-    x5 <- stringr::str_trim(x4, side = "both")
-    ## Remove anything in brackets, e.g. (remastered) etc
-    x6 <- stringr::str_remove_all(x5, "\\s\\(.*")
-    return(x6)
-  }
   
   observeEvent(input$refresh, {
     if (input$refresh > 0) {
@@ -347,6 +346,17 @@ server <- function(input, output, session) {
     
   })
   
+  # Plotly: Album Ratings ------------------------------------------------------
+  # 
+  # output$yearRatings({
+  #   
+  #   ## Merge lastfm data with plex - for now, will just be the albums played that year, not albums released that year
+  #   values$top10data %>% 
+  #     
+  #   
+  #   
+  # })
+  
   
   
   
@@ -391,7 +401,7 @@ server <- function(input, output, session) {
       arrange(album, date) %>%
       mutate(track = forcats::fct_inorder(track))
     
-    
+    print('Getting plex plays')
     ## Also get Plex DB dataframe for album ratings (x2)
     values$ratings <- plexDB %>%
       # filter(artist == 'Sault') %>%
@@ -404,7 +414,8 @@ server <- function(input, output, session) {
       select(-n) %>%
       mutate(album = ifelse(nchar(album) > 15, 
                             str_c(str_sub(album, 0, 13), "..."),
-                            album)) %>%  
+                            album)) %>% 
+      mutate(discNum = replace_na(discNum, 1)) %>% 
       mutate(album = ifelse(discNum == 1, 
                             album, 
                             str_c(album, " (", discNum, ")"))) %>%
@@ -412,7 +423,7 @@ server <- function(input, output, session) {
         rating = replace_na(rating, 0) / 2,
         album = forcats::fct_rev(album)
       )
-    
+    print(unique(values$ratings$album))
   })
   
   
