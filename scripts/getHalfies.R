@@ -2,6 +2,7 @@
 
 library(tidyverse);library(httr);library(lubridate);library(rdrop2)
 
+source('scripts/getPlex.R')
 halfies <- getPlex(T) %>% 
     filter(rating %% 2 == 1)
 
