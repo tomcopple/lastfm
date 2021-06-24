@@ -27,13 +27,8 @@ api_sig <- md5(glue::glue("api_key{api}methodauth.getSessiontoken{token}{secret}
 sessionURL <- glue::glue("http://ws.audioscrobbler.com/2.0/?method=auth.getSession&api_key={api}&token={token}&api_sig={api_sig}")
 session <- httr::GET(sessionURL)
 finalKey <- content(session) %>% 
-    xml2::as_list() %>% 
-    pluck(1) %>% 
-    pluck('session') %>% 
-    pluck('key') %>% 
-    pluck(1)
-
-
+    xml2::xml_find_all('//key') %>% 
+    xml_text()
 
 # 2. Scrobble -------------------------------------------------------------
 
