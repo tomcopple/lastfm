@@ -34,9 +34,9 @@ finalKey <- content(session) %>%
 
 timeNow <- as.numeric(lubridate::now())
 
-album <- "AlbumName"
-albumArtist <- ""
-artist <- "ArtistName"
+album <- "Unknown Album"
+albumArtist <- "Artist"
+artist <- "Artist"
 track <- "TrackName"
 
 scrobbles <- list(

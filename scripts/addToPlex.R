@@ -41,9 +41,9 @@ playlist <- lastfm %>%
                    mutate(artist = ifelse(is.na(artist), albumArtist, artist)) %>% 
                    mutate_if(is.character, str_to_lower)) %>% 
     filter(is.na(rating)) %>% 
-    filter(n > 10) %>% 
+    filter(n > 9) %>% 
     add_count() %>% 
-    sample_n(size = 25)
+    sample_n(size = ifelse(nrow(.) > 25, 25, nrow(.)))
 playlist
 
 ## Want to delete everything first?
