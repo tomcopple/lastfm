@@ -117,14 +117,9 @@ ui <- material_page(
         material_card(
           title = "", plotlyOutput("plotlyBar", height = "100%")
           ),
-        material_row(
-          material_column(material_card(
-            title = "", plotlyOutput('yearRatings', height = "100%")
-          )),
-          material_column(material_card(
-            title = "", plotlyOutput('yearRatings2', height = '100%')
-          ))
-          
+        h3("Plex Summary"),
+        material_card(
+          title = "", plotlyOutput('yearRatings', height = "100%")
         )
       )
     )
@@ -348,14 +343,36 @@ server <- function(input, output, session) {
   
   # Plotly: Album Ratings ------------------------------------------------------
   # 
-  # output$yearRatings({
-  #   
-  #   ## Merge lastfm data with plex - for now, will just be the albums played that year, not albums released that year
-  #   values$top10data %>% 
-  #     
-  #   
-  #   
-  # })
+  output$yearRatings <- renderPlotly({
+    
+    ratings <- left_join(
+      plexDB %>% mutate(joinArtist = getSlugs(artist),
+                        joinTrack = getSlugs(track)),
+      values$lastfm %>% mutate(joinArtist = getSlugs(artist),
+                               joinTrack = getSlugs(track)) %>% 
+        count(joinArtist, joinTrack),
+      by = c('joinArtist', 'joinTrack')
+    ) %>% select(artist, track, album, rating, trackNum, discNum, year, n)
+
+    if (input$chooseYear == 'All time') {
+      top10 <- ratings %>% group_by(artist) %>% mutate(n = sum(n)) %>% arrange(desc(n)) %>% ungroup() %>% head(10) %>% pull(artist)
+      ratings <- plexDB %>% 
+        filter(artist %in% top10)
+    } else if (input$chooseYear == 'Last 30 days') {
+      ratings <- filter(plexDB, year >= year(today() - 30))
+    } else {
+      ratings <- filter(plexDB, year == input$chooseYear)
+    }
+    ratings %>% 
+      mutate(album = ifelse(nchar(album) > 15, str_c(str_sub(album, 0, 13), "..."), album)) %>% 
+      mutate(rating0 = replace_na(rating, 0)/2) %>% 
+      mutate(rating = rating/2) %>% 
+      mutate(text = str_c(artist, " - ", track, "<br>", "Rating: ", rating0)) %>% 
+      ggplot(aes(x = trackNum, y = rating0, group = album, color = album, text = text)) + 
+      geom_point(alpha = 0.5) + 
+      geom_smooth(se = FALSE, span = 3, aes(y = rating))
+    plotly::ggplotly(tooltip = 'text')
+  })
   
   
   
