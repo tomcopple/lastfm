@@ -69,7 +69,7 @@ Row
 ```{r}
 play21 %>% 
     add_count(artist, album) %>% 
-    na.omit() %>% 
+    # na.omit() %>% 
     group_by(artist, album, n) %>%  
     summarise(avRat = round(mean(rating)/2, 2), 
               n1 = n(), .groups = 'drop') %>% 
