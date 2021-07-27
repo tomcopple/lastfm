@@ -181,11 +181,9 @@ observeEvent(eventExpr = input$chooseYear,
                  minYear <- as.numeric(str_sub(input$chooseYear, 0, 4))
                  maxYear <- minYear + 9
                  rv$chooseYear <- minYear
-                 rv$showLastfm <- "hidden"
                  rv$plexYear <- filter(rv$plex, year >= minYear, year <= maxYear)
                } else {
                  rv$chooseYear <- input$chooseYear
-                 rv$showLastfm <- "show"
                  rv$plexYear <- filter(rv$plex, year == as.numeric(input$chooseYear))  
                }
                
@@ -256,18 +254,6 @@ DT::renderDataTable({
 
 ```
 
-<!-- Row -->
-<!-- ----------------------------------------------------------------------- -->
-
-<!-- ### Top songs so far -->
-
-<!-- ```{r} -->
-<!-- play16 %>% -->
-<!--     select(artist, album, track, rating) %>%  -->
-<!--     filter(rating > 7) %>% knitr::kable() -->
-
-<!-- ``` -->
-
 Row {}
 -----------------------------------------------------------------------
 
@@ -275,57 +261,62 @@ Row {}
 
 ```{r, eval = T}
 renderPlot({
+  
   if(rv$chooseYear >= 2006) {
-    ## Match plex tracks with lastfm plays, make everything lower case and remove punctuation
-    plexCount <- rv$plexYear %>% 
-      unite(col = 'match', albumArtist, album, sep = " - ", remove = FALSE) %>% 
-      mutate(match = getSlugs(match)) %>% 
-      distinct(albumArtist, album, match, albumKey)
+    print("2006")
+    # From 2006 onwards, take 25 most played albums from lastfm, see if they're in plex
+    inPlex <- rv$plex %>% 
+      unite(col = 'match', albumArtist, album, sep = " - ", remove = TRUE) %>% 
+      mutate(match = getSlugs(match), inPlex = 1) %>% 
+      distinct(match, inPlex)
     lastfmCount <- rv$lastfm %>% 
-      filter(year(date) == input$chooseYear) %>%
-      unite(col = 'match', artist, album, sep = " - ", remove = TRUE) %>% 
+      filter(year(date) == as.numeric(input$chooseYear)) %>%
+      unite(col = 'match', artist, album, sep = " - ", remove = FALSE) %>% 
       mutate(match = getSlugs(match)) %>% 
-      count(match, sort = T) %>% 
+      count(artist, album, match, sort = T) %>% 
       slice(1:25)
-    albums <- right_join(
-      plexYear,
+    albums <- left_join(
       lastfmCount,
+      inPlex,
       by = 'match'
     ) %>% 
       arrange(desc(n)) %>% 
-      mutate(inPlex = ifelse(is.na(albumKey), 1, 0)) %>% 
+      mutate(inPlex = replace_na(inPlex, 0)) %>% 
       mutate(inPlex = forcats::as_factor(inPlex),
              rank = row_number())
     
     } else {
-      plexYear <- rv$plexYear %>% 
-        unite(col = 'match', artist, album, sep = " - ", remove = FALSE) %>% 
-        mutate(match = getSlugs(match))
+      # Before 2006 just take plex albums from that year and arrange by playcount
+      plexCount <- rv$plexYear %>% 
+        unite(col = 'match', albumArtist, album, sep = " - ", remove = FALSE) %>% 
+        mutate(match = getSlugs(match), inPlex = 1) %>% 
+        distinct(artist = albumArtist, album, match, inPlex)
     lastfmCount <- rv$lastfm %>% 
       unite(col = 'match', artist, album, sep = " - ", remove = TRUE) %>% 
       mutate(match = getSlugs(match)) %>% 
-      count(match, sort = T) %>% 
-      slice(1:25)
-    tracks <- left_join(
-      plexYear,
+      count(match, sort = T)
+    albums <- left_join(
+      plexCount,
       lastfmCount,
       by = 'match'
     ) %>% 
       arrange(desc(n)) %>% 
-      mutate(inPlex = ifelse(is.na(key), 1, 0)) %>% 
+      slice(1:25) %>% 
+      mutate(inPlex = replace_na(inPlex, 0)) %>% 
       mutate(inPlex = forcats::as_factor(inPlex),
              rank = row_number())
         
     }
     
-    tracks %>% 
+    albums %>% 
       unite(col = 'name', artist, album, sep = " - ") %>% 
       mutate(nchar = nchar(name)) %>% 
       mutate(name = ifelse(nchar > 47, str_c(str_sub(name, 0, 47), "..."), name)) %>% 
       mutate(name = forcats::fct_rev(forcats::fct_inorder(name))) %>% 
       ggplot(aes(x = name, y = n, fill = inPlex, group = inPlex)) + 
-      geom_col() + 
-      scale_fill_manual(values = c('white', "#809FDD", "#003EBB")) +
+      geom_col(width = 0.7, color = "#003EBB") + 
+      scale_fill_manual(values = c('white', "#809FDD"),
+                        breaks = c(0, 1)) +
       theme(legend.position = 'none') +
       xlab(NULL) + ylab(NULL) +
       coord_flip()
@@ -336,40 +327,64 @@ renderPlot({
 
 ```{r, eval = T}
 renderPlot({
-  if (rv$chooseYear >= 2006) {
-    plex <- rv$plex %>% 
-      unite(col = 'lowerAlbum', artist, album, sep = " - ", remove = FALSE) %>% 
-      unite(col = "lowerTrack", artist, track, sep = " - ", remove = FALSE) %>% 
-      mutate(lowerAlbum = str_remove_all(str_to_lower(lowerAlbum), "[[:punct:]]"),
-             lowerTrack = str_remove_all(str_to_lower(lowerTrack), "[[:punct:]]"))
-    tracks <- rv$lastfm %>% filter(year(date) == input$chooseYear)
-    tracks %>%
-      filter(str_detect(artist, 'Duggee', negate = TRUE),
-             str_detect(artist, 'Night Garden', negate = TRUE),
-             str_detect(artist, 'Cocomelon', negate = TRUE),
-             str_detect(artist, "Super Simple", negate = TRUE)) %>% 
-      count(artist, track, sort = TRUE) %>% 
-      slice_head(n = 50) %>% 
-      na.omit() %>% 
-      unite(col = "lower", artist, track, sep = " - ", remove = FALSE) %>% 
-      mutate(lower = str_remove_all(str_to_lower(lower), "[[:punct:]]")) %>% 
-      mutate(inPlex = case_when(
-        lower %in% plex$lowerTrack ~ 1,
-        TRUE ~ 0)) %>% 
-      mutate(
-        inPlex = forcats::as_factor(inPlex),
-        rank = row_number()) %>%
+  if(rv$chooseYear >= 2006) {
+    print("2006")
+    # From 2006 onwards, take 25 most played tracks from lastfm, see if they're in plex
+    inPlex <- rv$plex %>% 
+      unite(col = 'match', artist, track, sep = " - ", remove = TRUE) %>% 
+      mutate(match = getSlugs(match), inPlex = 1) %>% 
+      distinct(match, inPlex)
+    lastfmCount <- rv$lastfm %>% 
+      filter(year(date) == as.numeric(input$chooseYear)) %>%
+      unite(col = 'match', artist, track, sep = " - ", remove = FALSE) %>% 
+      mutate(match = getSlugs(match)) %>% 
+      count(artist, track, match, sort = T) %>% 
+      slice(1:25)
+    albums <- left_join(
+      lastfmCount,
+      inPlex,
+      by = 'match'
+    ) %>% 
+      arrange(desc(n)) %>% 
+      mutate(inPlex = replace_na(inPlex, 0)) %>% 
+      mutate(inPlex = forcats::as_factor(inPlex),
+             rank = row_number())
+    
+    } else {
+      # Before 2006 just take plex albums from that year and arrange by playcount
+      plexCount <- rv$plexYear %>% 
+        unite(col = 'match', artist, track, sep = " - ", remove = FALSE) %>% 
+        mutate(match = getSlugs(match), inPlex = 1) %>% 
+        distinct(artist, track, match, inPlex)
+    lastfmCount <- rv$lastfm %>% 
+      unite(col = 'match', artist, track, sep = " - ", remove = TRUE) %>% 
+      mutate(match = getSlugs(match)) %>% 
+      count(match, sort = T)
+    albums <- left_join(
+      plexCount,
+      lastfmCount,
+      by = 'match'
+    ) %>% 
+      arrange(desc(n)) %>% 
+      slice(1:25) %>% 
+      mutate(inPlex = replace_na(inPlex, 0)) %>% 
+      mutate(inPlex = forcats::as_factor(inPlex),
+             rank = row_number())
+        
+    }
+    
+    albums %>% 
       unite(col = 'name', artist, track, sep = " - ") %>% 
       mutate(nchar = nchar(name)) %>% 
       mutate(name = ifelse(nchar > 47, str_c(str_sub(name, 0, 47), "..."), name)) %>% 
       mutate(name = forcats::fct_rev(forcats::fct_inorder(name))) %>% 
       ggplot(aes(x = name, y = n, fill = inPlex, group = inPlex)) + 
-      geom_col() + 
-      scale_fill_manual(values = c('white', "#809FDD", "#003EBB")) +
+      geom_col(width = 0.7, color = "#003EBB") + 
+      scale_fill_manual(values = c('white', "#809FDD"),
+                        breaks = c(0, 1)) +
       theme(legend.position = 'none') +
       xlab(NULL) + ylab(NULL) +
       coord_flip()
-  }
 })
 ```
 
