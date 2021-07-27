@@ -160,7 +160,7 @@ ui <- material_page(
         )),
         material_row(
           material_column(material_card(
-            title = "", plotlyOutput('albumRatings', height = "100%")
+            title = "", plotOutput('albumRatings')
           )),
           material_column(material_card(
             title = "", plotlyOutput('albumRatings2', height = '100%')
@@ -515,7 +515,7 @@ server <- function(input, output, session) {
   
   # Plotly: Album Ratings --------------------------------------------------
   
-  output$albumRatings <- renderPlotly({
+  output$albumRatings <- renderPlot(
     if (str_to_lower(values$chooseArtist) %in% str_to_lower(plexDB$artist)) {
      
       colors <- c('#FFFFFF',
@@ -525,42 +525,37 @@ server <- function(input, output, session) {
                   '#6475C4',
                   '#3B50B2')
       
-      plot_ly(
-        values$ratings %>% 
-          mutate(rating = forcats::as_factor(rating)),
-        y = ~ album,
-        x = ~ trackNum,
-        type = 'scatter',
-        mode = 'markers',
-        marker = list(
-          size = 20,
-          line = list(color = 'lightgrey', width = 1),
-          color = ~ colors[as.numeric(as.character(rating)) +
-                             1]
-        ),
-        text = ~ str_c(track, rating, sep = ": "),
-        hoverinfo = 'text'
-      ) %>%
-        plotly::layout(
-          showlegend = FALSE,
-          yaxis = list(title = NA),
-          xaxis = list(title = NA, zeroline = FALSE),
-          ## Another fudge to get margin to adapt to album title length
-          margin = list(l = (max(
-            nchar(as.character(values$ratings$album))
-          ) * 6.7))
-        )
+      values$ratings %>% 
+        mutate(rating = ifelse(rating == 0, NA, rating)) %>% 
+        group_by(album) %>% 
+        mutate(y = n()) %>% 
+        na.omit() %>% 
+        mutate(x = n()) %>% 
+        group_by(album, x, y) %>% summarise(avRat = mean(rating), .groups = 'drop') %>% 
+        arrange(avRat) %>% 
+        mutate(album = str_c(album, "\n", "(", round(avRat, 1), ")")) %>% 
+        mutate(album = forcats::fct_inorder(album)) %>% 
+        mutate(compRat = (x/y)*avRat) %>% 
+        select(-x, -y) %>% 
+        gather(-album, key = series, value = Rating) %>% 
+        ggplot(aes(x = album, y = Rating, group = series, fill = series)) +
+        geom_col(position = 'identity', color = colors[6], size = 1) +
+        scale_fill_manual(values = c(colors[1], colors[5])) + 
+        coord_flip() +
+        labs(x = NULL) +
+        theme(legend.position = 'none')
       
     }
-  })
+  )
   
   output$albumRatings2 <- renderPlotly({
     if (str_to_lower(values$chooseArtist) %in% str_to_lower(plexDB$artist)) {
       ratingsPlot2 <- values$ratings %>%
         mutate(rating = ifelse(rating == 0, NA, rating)) %>% 
-        na.omit() %>% 
+        # na.omit() %>% 
         group_by(album) %>% 
-        mutate(avRat = mean(rating)) %>%
+        mutate(avRat = mean(rating, na.rm = TRUE)) %>%
+        mutate(rating = ifelse(is.na(rating), 0, rating)) %>% 
         mutate(albumLegend = str_c(album, ' (', round(avRat, 1), ')')) %>%
         add_count() %>%
         mutate(smooth = ifelse(n > 3,
