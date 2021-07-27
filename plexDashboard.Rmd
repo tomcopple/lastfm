@@ -1,0 +1,363 @@
+---
+title: "Plex Music 2016"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: rows
+    vertical_layout: scroll
+runtime: shiny
+    
+---
+
+```{r global, include = FALSE}
+# Load data in global chunk so it's accessible
+library(flexdashboard);library(tidyverse);library(httr)
+library(lubridate);library(treemapify);library(plotly)
+library(jsonlite);library(rdrop2)
+token <- 'ABhPTJsJFC1CsCPKzzhb'
+
+getPlex <- function(refresh = FALSE) {
+  
+  if (refresh) {
+    token <- 'ABhPTJsJFC1CsCPKzzhb'
+    plexRaw <- content(GET("http://192.168.1.99:32400/library/sections/3/search?type=10", add_headers("X-Plex-Token" = token)), type = 'text') %>% 
+      jsonlite::fromJSON() %>% 
+      pluck('MediaContainer') %>% 
+      pluck('Metadata')
+    
+    plex <- plexRaw %>% select(
+      albumArtist    = grandparentTitle, 
+      artist      = originalTitle, 
+      album       = parentTitle, 
+      track       = title, 
+      rating      = userRating,
+      key         = ratingKey,
+      artistKey   = grandparentRatingKey,
+      albumKey    = parentRatingKey,
+      trackNum       = index,
+      discNum        = parentIndex,
+      year           = parentYear
+    ) %>% 
+      mutate(artist = ifelse(is.na(artist), albumArtist, artist)) %>% 
+      as_tibble()
+    
+    write.csv(plex, file = here::here('tempData', 'plexDB.csv'), 
+              row.names = FALSE, fileEncoding = "UTF-8")
+    rdrop2::drop_upload(file = here::here('tempData', "plexDB.csv"), 
+                        path = "R/lastfm")
+    
+  } else {
+    
+    plex <- rdrop2::drop_read_csv(file = "R/lastfm/plexDB.csv") %>% 
+      as_tibble()
+    
+  }
+  
+  return(plex)
+  
+}
+
+getLastfm <- function(refresh = TRUE) {
+    library(tidyverse);library(rdrop2);library(here)
+    
+    rdrop2::drop_download("R/lastfm/tracks.csv",
+                          local_path = "tracks.csv",
+                          overwrite = T)
+
+    localData <- readr::read_csv("tracks.csv") %>%
+        mutate(date = lubridate::ymd_hms(date)) %>%
+        filter(!is.na(date)) %>%
+        as_tibble()
+    
+    if (refresh) {
+        maxDate = max(localData$date)
+        user <- Sys.getenv('LASTFM_USER')
+        api <- Sys.getenv('LASTFM_APIKEY')
+        
+        responseDF <- tibble()
+        pageNum <- 1
+        
+        # Keep getting data from lastfm until it's caught up with local data.
+        while (min(responseDF$date) >= maxDate) {
+            url <- paste0(
+                "http://ws.audioscrobbler.com/2.0/?method=user.getrecenttracks&user=",
+                user,
+                "&api_key=",
+                api,
+                "&format=json&limit=200&page=",
+                pageNum
+            )
+            responseRaw <- url %>%
+                httr::GET(.) %>%
+                httr::content(., as = "text") %>%
+                jsonlite::fromJSON(., simplifyDataFrame = T, flatten = T) %>%
+                magrittr::extract2(c('recenttracks', 'track')) %>%
+                select(
+                    track = name,
+                    artist = `artist.#text`,
+                    album = `album.#text`,
+                    date = `date.#text`
+                ) %>%
+                mutate(date = lubridate::dmy_hm(date)) %>%
+                na.omit()
+            responseDF <- bind_rows(responseDF, responseRaw) %>%
+                arrange(desc(date))
+            pageNum <- pageNum + 1
+        }
+        
+        # Then filter response for new tracks, and add to localData
+        localData <- bind_rows(filter(responseDF, date > maxDate),
+                               localData)
+        
+        ## Write a local csv (ignored in git) and upload to Dropbox. 
+        write.csv(localData, file = "tracks.csv", row.names = FALSE, fileEncoding = "UTF-8")
+        rdrop2::drop_upload(file = "tracks.csv", path = "R/lastfm")
+    }
+    
+    return(localData)
+}
+
+plex <- getPlex(F)
+lastfm <- getLastfm(F)
+```
+
+Sidebar {.sidebar data-width=250}
+-----------------------------------------------------------------------
+
+```{r}
+selectInput("chooseYear", label = "Select year:",
+            choices = sort(unique(plex$year)))
+
+actionButton(inputId = "refreshPlex", label = "Refresh Plex", icon = icon('refresh'))
+
+actionButton(inputId = "refreshLastfm", label = "Refresh Lastfm", icon = icon("refresh"))
+
+rv <- reactiveValues(plex = plex,
+                     lastfm = lastfm)
+
+observeEvent(eventExpr = input$refreshPlex,
+             handlerExpr = {
+               rv$plex <- getPlex (T)
+             })
+
+observeEvent(eventExpr = input$refreshLastfm,
+             handlerExpr = {
+               rv$lastfm <- getLastfm(T)
+             })
+
+observeEvent(eventExpr = input$chooseYear,
+             handlerExpr = {
+               rv$plexYear <- filter(rv$plex, year == input$chooseYear)
+             })
+```
+
+Row {data-height=100}
+----
+
+```{r, out.width = "100%", fig.height = 0.5}
+renderPlot({
+  progress <-  rv$plexYear %>% 
+  summarise(n1 = n(), n2 = sum(!is.na(rating))) %>% 
+  transmute(perc = n2/n1, tot = 1-perc) %>% 
+  gather() %>% rowwise() %>%  
+  mutate(label = ifelse(test = key == 'perc', 
+                        yes = str_c(round(100*value, 0), "%"), no = "")) %>% 
+  ggplot(aes(x = 1, y = value, fill = rev(key), alpha = rev(key))) + 
+  geom_col(position = 'fill', color = "#003EBB", size = 1) + 
+  coord_flip() + 
+  scale_fill_manual(values = (c("#C1D1F4", "#003EBB"))) + 
+  scale_alpha_manual(values = c(0.5, 1)) + 
+  geom_label(aes(label = label, y = 0.9), size = 3, fill = 'white', label.size = 0)  + 
+  theme_void()+ 
+  theme(legend.position = 'none', 
+        plot.background = element_rect(fill = 'white', color = 'white'),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank())
+# ggplotly(progress) %>% layout(height=80)
+progress
+})
+
+```
+
+Row
+-----------------------------------------------------------------------
+
+### All albums
+
+```{r}
+reactive({
+  rv$plexYear %>% 
+  add_count(artist, album) %>% 
+  filter(!is.na(rating)) %>% 
+  group_by(artist, album, n) %>%  
+  summarise(avRat = round(mean(rating)/2, 2), 
+            n1 = n(), .groups = 'drop') %>% 
+  arrange(desc(avRat)) %>% 
+  unite(n1, n, col = 'n', sep = "/") %>% 
+  mutate('#' = row_number()) %>% 
+  relocate('#', .before = 'artist') %>% 
+  knitr::kable()
+})
+
+```
+
+<!-- Row -->
+<!-- ----------------------------------------------------------------------- -->
+
+<!-- ### Top songs so far -->
+
+<!-- ```{r} -->
+<!-- play16 %>% -->
+<!--     select(artist, album, track, rating) %>%  -->
+<!--     filter(rating > 7) %>% knitr::kable() -->
+
+<!-- ``` -->
+
+Row
+-----------------------------------------------------------------------
+
+### Album Plays (Plex in blue)
+
+```{r}
+renderPlot({
+  plex <- rv$plex %>% 
+  unite(col = 'lowerAlbum', artist, album, sep = " - ", remove = FALSE) %>% 
+  unite(col = "lowerTrack", artist, track, sep = " - ", remove = FALSE) %>% 
+  mutate(lowerAlbum = str_remove_all(str_to_lower(lowerAlbum), "[[:punct:]]"),
+         lowerTrack = str_remove_all(str_to_lower(lowerTrack), "[[:punct:]]"))
+tracks <- rv$lastfm %>% filter(year(date) == input$chooseYear)
+
+tracks %>% count(artist, album, sort = TRUE) %>% 
+  na.omit() %>% 
+  unite(col = "lower", artist, album, sep = " - ", remove = FALSE) %>% 
+  mutate(lower = str_remove_all(str_to_lower(lower), "[[:punct:]]")) %>% 
+  mutate(inPlex = case_when(
+    lower %in% plex$lowerAlbum ~ 1,
+    TRUE ~ 0)) %>% 
+  mutate(
+    inPlex = forcats::as_factor(inPlex),
+    rank = row_number()) %>%
+  ## No idea what this does, why not just top 25?
+  # group_by(inPlex) %>% 
+  # mutate(z = max(rank)) %>% 
+  # ungroup() %>% 
+  # mutate(z = ifelse(min(z) < 25, 25, min(z))) %>% 
+  # filter(rank <= z) %>% 
+  slice(1:25) %>% 
+  unite(col = 'name', artist, album, sep = " - ") %>% 
+  mutate(nchar = nchar(name)) %>% 
+  mutate(name = ifelse(nchar > 47, str_c(str_sub(name, 0, 47), "..."), name)) %>% 
+  mutate(name = forcats::fct_rev(forcats::fct_inorder(name))) %>% 
+  ggplot(aes(x = name, y = n, fill = inPlex, group = inPlex)) + 
+  geom_col() + 
+  scale_fill_manual(values = c('white', "#809FDD", "#003EBB")) +
+  theme(legend.position = 'none') +
+  xlab(NULL) + ylab(NULL) +
+  coord_flip()
+})
+
+
+```
+
+### Track Plays (Plex in blue)
+
+```{r}
+renderPlot({
+  plex <- rv$plex %>% 
+  unite(col = 'lowerAlbum', artist, album, sep = " - ", remove = FALSE) %>% 
+  unite(col = "lowerTrack", artist, track, sep = " - ", remove = FALSE) %>% 
+  mutate(lowerAlbum = str_remove_all(str_to_lower(lowerAlbum), "[[:punct:]]"),
+         lowerTrack = str_remove_all(str_to_lower(lowerTrack), "[[:punct:]]"))
+  tracks <- rv$lastfm %>% filter(year(date) == input$chooseYear)
+tracks %>%
+  filter(str_detect(artist, 'Duggee', negate = TRUE),
+         str_detect(artist, 'Night Garden', negate = TRUE),
+         str_detect(artist, 'Cocomelon', negate = TRUE),
+         str_detect(artist, "Super Simple", negate = TRUE)) %>% 
+  count(artist, track, sort = TRUE) %>% 
+  slice_head(n = 50) %>% 
+  na.omit() %>% 
+  unite(col = "lower", artist, track, sep = " - ", remove = FALSE) %>% 
+  mutate(lower = str_remove_all(str_to_lower(lower), "[[:punct:]]")) %>% 
+  mutate(inPlex = case_when(
+    lower %in% plex$lowerTrack ~ 1,
+    TRUE ~ 0)) %>% 
+  mutate(
+    inPlex = forcats::as_factor(inPlex),
+    rank = row_number()) %>%
+  # group_by(inPlex) %>% 
+  # mutate(z = max(rank)) %>% 
+  # ungroup() %>% 
+  # mutate(z = min(z)) %>% 
+  # filter(rank <= z) %>% 
+  unite(col = 'name', artist, track, sep = " - ") %>% 
+  mutate(nchar = nchar(name)) %>% 
+  mutate(name = ifelse(nchar > 47, str_c(str_sub(name, 0, 47), "..."), name)) %>% 
+  mutate(name = forcats::fct_rev(forcats::fct_inorder(name))) %>% 
+  ggplot(aes(x = name, y = n, fill = inPlex, group = inPlex)) + 
+  geom_col() + 
+  scale_fill_manual(values = c('white', "#809FDD", "#003EBB")) +
+  theme(legend.position = 'none') +
+  xlab(NULL) + ylab(NULL) +
+  coord_flip()
+})
+
+```
+
+
+
+Row
+-----------------------------------------------------------------------
+
+### Ratings 1
+
+```{r}
+renderPlot({
+  colPal <- c('#FFFFFF', colorRampPalette(c("#C1D1F4", "#003EBB"))(5))
+rv$plexYear %>%
+  filter(artist != 'Various Artists') %>% 
+  mutate(album = ifelse(nchar(album) > 15, 
+                        str_c(str_sub(album, 0, 13), "..."),
+                        album)) %>%
+  mutate(artist = ifelse(nchar(artist) > 15, 
+                         str_c(str_sub(artist, 0, 13), "..."),
+                         artist)) %>%
+  mutate(rating = replace_na(rating, 0)) %>%
+  mutate(rating = as.factor(rating/2)) %>%
+  mutate(title = str_c(artist, album, sep = ' - '),
+         title = forcats::fct_rev(title)) %>%
+  ggplot(aes(x = trackNum, y = title,
+             fill = rating, group = rating)) +
+  geom_point(shape = 21, size = 5) +
+  scale_fill_manual("", values = colPal,
+                    limits = c(0, 1, 2, 3, 4, 5),
+                    labels = c(0, 1, 2, 3, 4, 5)) +    xlab(NULL) + ylab(NULL)
+
+})
+
+```
+
+
+
+
+### Ratings 2
+
+```{r}
+renderPlotly({
+  rv$plexYear %>% 
+  filter(artist != 'Various Artists') %>% 
+  mutate(album = ifelse(nchar(album) > 15, 
+                        str_c(str_sub(album, 0, 13), "..."),
+                        album)) %>%
+  mutate(rating0 = replace_na(rating, 0)/2, 
+         rating = rating/2) %>% 
+  mutate(text = str_c(artist, " - ", track, "<br>", "Rating: ", rating0)) %>% 
+  ggplot(aes(x = trackNum, y = rating0, group = album, color = album, text = text)) + 
+  geom_point(alpha = 0.5) + 
+  geom_smooth(se = FALSE, span = 3, aes(y = rating))
+plotly::ggplotly(tooltip = 'text')
+})
+
+
+```
+
