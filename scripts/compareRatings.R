@@ -36,19 +36,21 @@ pf %>% filter(!is.na(rating)) %>% count(album,sort = T)
 # Albums by Artist --------------------------------------------------------
 
 ## Compare albums by artist?
-compArtist <- "Girls"
+compArtist <- "Flying Lotus"
 plexArtist <- filter(plex, str_detect(artist, compArtist)) %>% 
     filter(albumArtist != "Various Artists")
 plexArtist %>% 
     group_by(album) %>% 
     arrange(album, discNum, trackNum) %>% 
-    mutate(trackNum = row_number()) %>% 
+    mutate(trackNum = row_number(),
+           avgRat = round(mean(rating, na.rm = TRUE), 1)/2) %>% 
     na.omit() %>% 
-    ggplot(aes(x = trackNum, y = rating, group = album, color = album,
+    ggplot(aes(x = trackNum, y = rating/2, group = album, color = album,
+               avg = avgRat,
                text = str_c(track, ' (', rating/2, ')'))) +
     geom_point(alpha = 0.5) +
     geom_smooth(se = FALSE, span = 1)
-plotly::ggplotly()
+plotly::ggplotly(tooltip = 'avg')
 
 
 colors <- c('#FFFFFF', '#DDE2F9','#B5BEE7',
@@ -82,9 +84,22 @@ plexArtist %>%
     mutate(y = n()) %>% 
     na.omit() %>% 
     mutate(x = n()) %>% 
-    group_by(album, x, y) %>% summarise(avRat = mean(rating)/2) %>% 
-    arrange(desc(avRat)) %>% 
-    unite(x, y, col = 'n', sep = "/")
+    group_by(album, x, y) %>% summarise(avRat = mean(rating)/2, .groups = 'drop') %>% 
+    arrange(avRat) %>% 
+    mutate(album = str_c(album, "\n", "(", round(avRat, 1), ")")) %>% 
+    mutate(album = forcats::fct_inorder(album)) %>% 
+    mutate(compRat = (x/y)*avRat) %>% 
+    select(-x, -y) %>% 
+    gather(-album, key = series, value = Rating) %>% 
+    ggplot(aes(x = album, y = Rating, group = series, fill = series)) +
+    geom_col(position = 'identity', color = colors[6], size = 1) +
+    scale_fill_manual(values = c(colors[1], colors[5])) + 
+    coord_flip() +
+    labs(x = NULL) +
+    theme(legend.position = 'none')
+
+
+
 
 
 # Compare completed albums ------------------------------------------------
