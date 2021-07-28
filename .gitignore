@@ -12,3 +12,4 @@ tempData/
 *.html
 *.csv
 .DS_Store
+*/html/*
