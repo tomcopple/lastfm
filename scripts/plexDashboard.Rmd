@@ -139,7 +139,8 @@ removeEve <- function(lastfm) {
       str_detect(artist, "Duggee", negate = T),
       str_detect(artist, "Lullaby", negate = T),
       str_detect(artist, "Night Garden", negate = T),
-      str_detect(artist, 'Toddler Tunes', negate = T)
+      str_detect(artist, 'Toddler Tunes', negate = T),
+      str_detect(artist, 'Pinkfong', negate = T)
     )
 }
 
