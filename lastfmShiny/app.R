@@ -429,10 +429,7 @@ server <- function(input, output, session) {
       filter(n > 1) %>%
       ungroup() %>%
       select(-n) %>%
-      mutate(album = ifelse(nchar(album) > 15, 
-                            str_c(str_sub(album, 0, 13), "..."),
-                            album)) %>% 
-      mutate(discNum = replace_na(discNum, 1)) %>% 
+       mutate(discNum = replace_na(discNum, 1)) %>% 
       mutate(album = ifelse(discNum == 1, 
                             album, 
                             str_c(album, " (", discNum, ")"))) %>%
@@ -532,6 +529,9 @@ server <- function(input, output, session) {
         na.omit() %>% 
         mutate(x = n()) %>% 
         group_by(album, x, y) %>% summarise(avRat = mean(rating), .groups = 'drop') %>% 
+        mutate(album = ifelse(nchar(album) > 15, 
+                              str_c(str_sub(album, 0, 13), "..."),
+                              album)) %>% 
         arrange(avRat) %>% 
         mutate(album = str_c(album, "\n", "(", round(avRat, 1), ")")) %>% 
         mutate(album = forcats::fct_inorder(album)) %>% 
@@ -555,6 +555,9 @@ server <- function(input, output, session) {
         # na.omit() %>% 
         group_by(album) %>% 
         mutate(avRat = mean(rating, na.rm = TRUE)) %>%
+        mutate(album = ifelse(nchar(album) > 15, 
+                              str_c(str_sub(album, 0, 13), "..."),
+                              album)) %>% 
         mutate(rating = ifelse(is.na(rating), 0, rating)) %>% 
         mutate(albumLegend = str_c(album, ' (', round(avRat, 1), ')')) %>%
         add_count() %>%
