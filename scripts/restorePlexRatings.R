@@ -1,29 +1,18 @@
 ## Restore all ratings
 
 library(tidyverse);library(httr)
-## Firstly, read in the desired csv
-filesRaw <- rdrop2::drop_search('plexRatings')
-
-files <- filesRaw %>% 
-    magrittr::extract2('matches') %>% 
-    map_df(magrittr::extract2, 2) %>% 
-    magrittr::extract2('name')
-print(files)
-
-chooseData <- '2020-12-07'
 
 
-rdrop2::drop_download(
-    path = str_c('R/lastfm/', chooseData, '-plexRatings.csv'), overwrite = T,
-    local_path = file.path('tempData', 'temp.csv'))
+# 1. Download and import restore file -------------------------------------
+## Need to go to dropbox version history and download a previous version
+## Save as restoreRatings.csv somewhere
 
-ratings <- read_csv(file.path('tempData', 'temp.csv'))
+restoreRatings <- read_csv(file.path('tempData', 'restoreRatings.csv'))
 
 ## Load Plex library and get key identifiers for rated tracks
-
 token <- 'ABhPTJsJFC1CsCPKzzhb'
 
-## Don't both with artist, just keep album artist as easier?
+## Don't bother with artist, just keep album artist as easier?
 allTracks <- content(GET("http://192.168.1.99:32400/library/sections/3/search?type=10", 
                          add_headers("X-Plex-Token" = token))) %>% 
     magrittr::extract2('MediaContainer') %>% 
@@ -36,12 +25,14 @@ allTracks <- content(GET("http://192.168.1.99:32400/library/sections/3/search?ty
 
 ## Add ratingKey to ratings
 ## Only keep ones where rating != userRating
-combined <- ratings %>% 
-    # filter(str_detect(artist, 'Wilbury')) %>% 
-    # mutate(albumArtist = str_remove_all(albumArtist, 'The ')) %>% 
-    mutate(track = str_to_lower(track)) %>% 
+combined <- restoreRatings %>% 
+    mutate(track = str_to_lower(track),
+           albumArtist = str_to_lower(albumArtist),
+           album = str_to_lower(album)) %>% 
     left_join(allTracks %>% 
-                  mutate(track = str_to_lower(track)), 
+                  mutate(track = str_to_lower(track),
+                         albumArtist = str_to_lower(albumArtist),
+                         album = str_to_lower(album)), 
               by = c('albumArtist', 'album', 'track')) %>% 
     mutate(userRating = replace_na(userRating, 0)) %>% 
     filter(rating != userRating)
