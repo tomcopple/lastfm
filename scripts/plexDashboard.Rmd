@@ -587,19 +587,34 @@ All albums
 Row {data-height=50}
 -----------------------------------------------------------------------
 
-### 
-
 ```{r}
 shiny::checkboxInput(inputId = "complete2", label = "Only complete ratings", value = FALSE)
 ```
 
+Row {data-height=100}
+-----------------------------------------------------------------------
+
+### 
+
+```{r}
+shiny::textInput(inputId = 'filterText', label = 'Search', width = "100%")
+```
+
 Row {}
 -----------------------------------------------------------------------
-```{r out.height="100%"}
+
+### 
+
+```{r fig.height=96}
+
 renderPlotly({
 colors <- c('#FFFFFF', '#6475C4', '#3B50B2')
 
 plotData <- rv$plexYear %>% 
+  unite(albumArtist, album, col = 'filterText', sep = " ", remove = FALSE) %>% 
+  mutate(filterText = getSlugs(filterText)) %>% 
+  filter(str_detect(string = filterText, pattern = getSlugs(input$filterText))) %>% 
+  select(-filterText) %>% 
   group_by(albumArtist, album) %>% 
   filter(n() >= max(trackNum) - 3) %>% 
   purrr::when(
@@ -616,7 +631,7 @@ plotData <- rv$plexYear %>%
   group_by(albumArtist, album, x, y) %>% summarise(avRat = mean(rating) / 2, .groups = 'drop') %>% 
   # slice(1:25) %>% 
   arrange(avRat) %>% 
-  mutate(album = str_c(album, " (", round(avRat, 1), ")")) %>% 
+  mutate(album = str_c(album, " (", round(avRat, 2), ")")) %>% 
   mutate(album = forcats::fct_inorder(album)) %>% 
   mutate(compRat = (x/y)*avRat) %>% 
   select(-x, -y) %>% 
@@ -626,15 +641,24 @@ plotly::plot_ly(plotData %>% filter(series == 'avRat'),
                 x = ~Rating, y = ~album, type = 'bar', orientation = 'h',
                 text = ~str_c(albumArtist, ": ", album), hoverinfo = 'text',
                 marker = list(color = colors[1], 
-                              line = list(color = colors[2], width = 0.2)),
-                height = ifelse(nrow(plotData) > 400, nrow(plotData), 400)) %>% 
+                              line = list(color = colors[2], width = 0.2))) %>% 
   add_trace(data = plotData %>% filter(series == 'compRat'),
             marker = list(color = colors[2]), hoverinfo = 'none') %>% 
   layout(xaxis= list(title = ""),
-         yaxis = list(title = ""),
+         yaxis = list(title = "",
+                     tickfont = list(size = ifelse(
+                       nrow(plotData) > 1000, 6, 12
+                     )),
+                     dtick = 1),
          showlegend = FALSE,
          barmode = 'overlay',
-         margin = list(l = 4*max(nchar(as.character(plotData$album)))))
+         margin = list(l = 4*max(nchar(as.character(plotData$album)))),
+         height = ifelse(
+           nrow(plotData) > 1000, 5000,
+           ifelse(nrow(plotData) > 50, 
+                         nrow(plotData)*10, 
+                         ifelse(nrow(plotData) > 20, 
+                                nrow(plotData) * 15, 250))))
 
   # ggplot(aes(x = album, y = Rating, group = series, fill = series)) +
   # geom_col(position = 'identity', color = colors[3], size = 0.5, width = 0.7) +
