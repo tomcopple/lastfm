@@ -2,6 +2,7 @@
 
 library(tidyverse);library(spotifyr);library(httr);library(jsonlite);library(rdrop2)
 source(here::here('scripts', 'getLastfm.R'))
+source(here::here('scripts', 'getSlugs.R'))
 
 playlistID <- '5vQN8Cq4bbav7Dt31mTwr6'
 
@@ -52,11 +53,11 @@ tracks
 lastfm <- getLastfm(T)
 
 trackCount <- tracks %>% 
-    mutate(track_join = str_to_lower(track),
-           artist_join = str_to_lower(artist)) %>% 
+    mutate(track_join = getSlugs(track),
+           artist_join = getSlugs(artist)) %>% 
     left_join(lastfm %>% 
-                  transmute(track_join = str_to_lower(track),
-                            artist_join = str_to_lower(artist)) %>% 
+                  transmute(track_join = getSlugs(track),
+                            artist_join = getSlugs(artist)) %>% 
                   count(artist_join, track_join),
               by = c('artist_join', 'track_join')) %>% 
     select(!contains('_join'))
