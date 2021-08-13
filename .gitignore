@@ -13,3 +13,4 @@ tempData/
 *.csv
 .DS_Store
 */html/*
+*/*_cache/*

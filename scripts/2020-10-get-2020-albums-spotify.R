@@ -50,7 +50,7 @@ while (i <= totalTracks) {
 tracks <- map_df(j, get2020albums)
 tracks
 
-lastfm <- getLastfm(T)
+lastfm <- getLastfm(T) 
 
 trackCount <- tracks %>% 
     mutate(track_join = getSlugs(track),
@@ -62,4 +62,10 @@ trackCount <- tracks %>%
               by = c('artist_join', 'track_join')) %>% 
     select(!contains('_join'))
 
+trackCount %>% arrange(desc(n))
+
+trackCount %>% count(artist, wt = n, sort = T)
+trackCount %>% 
+    filter(str_detect(artist, 'Adrian')) %>% 
+    arrange(desc(n))
 
