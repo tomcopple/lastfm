@@ -40,7 +40,7 @@ keepgoing = TRUE
 while (keepgoing) {
     url <- str_c(baseurl, i)
     
-    print (glue::glue("This may take a while, don't panic... [{i}]"))
+    print (glue::glue("This may take a while, don't panic... [{i}/{pages}]"))
     
     ## send httr GET request and format response
     res1 <- httr::GET(url)
@@ -61,14 +61,13 @@ while (keepgoing) {
     
     i <- i + 1
     
-    if( year(min(restore$date)) < startYear || i >= pages) {
+    if( i > pages) {
         keepgoing <- FALSE
     }
     
 }
 
-restoreFinal <- filter(restore, year(date) >= startYear) %>% 
-    as_tibble()
+restoreFinal <- as_tibble(restore)
 
 ## Import current lastfm data
 source('scripts/getLastfm.R')
