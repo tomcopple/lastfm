@@ -39,8 +39,8 @@ plexDB <- read_csv('plexDB.csv')
 source('getLastfmShiny.R')
 source('getSlugs.R')
 
-# refresh = TRUE
-refresh = FALSE
+refresh = TRUE
+# refresh = FALSE
 
 # Run the function
 if (refresh) {
@@ -343,48 +343,34 @@ server <- function(input, output, session) {
   })
   
   # Plotly: Album Ratings ------------------------------------------------------
-  # 
+  
   output$yearRatings <- renderPlotly({
     
     ## Join plexDB and lastfm to get plays/ratings
     print(input$chooseType)
-    ratings <- left_join(
+    ratings <- inner_join(
       plexDB %>% mutate(
         newCol = case_when(
           input$chooseType == 'Artists' ~ getSlugs(artist),
-          input$chooseType == 'Albums' ~ getSlugs(album),
-          input$chooseType == 'Tracks' ~ getSlugs(track)
+          input$chooseType == 'Albums' ~ getSlugs(str_c(artist, " - ", album)),
+          input$chooseType == 'Tracks' ~ getSlugs(str_c(artist, " - ", track))
         )),
       values$top10data %>% mutate(newCol = getSlugs(newCol)),
       by = 'newCol'
     ) %>% 
-      select(artist, track, album, rating, trackNum, discNum, year)
+      distinct(artist, track, album, rating, trackNum, discNum, year, newCol)
     
-    ## If all time, then take top 10 artists
-    # if (input$chooseYear == 'All time') {
-    #   top10 <- ratings %>% 
-    #     group_by(album) %>% 
-    #     tally(wt = n) %>% 
-    #     ungroup() %>% 
-    #     arrange(desc(n)) %>% 
-    #     head(10) %>% 
-    #     pull(album)
-    #   
-    #   ratings <- plexDB %>% 
-    #     filter(album %in% top10)
-    #   
-    # } else if (input$chooseYear == 'Last 30 days') {
-    #   ratings <- filter(plexDB, year >= year(today() - 30))
-    # } else {
-    #   ratings <- filter(plexDB, year == input$chooseYear)
-    # }
+    print(head(ratings))
     ratings %>% 
-      mutate(albumName = ifelse(nchar(album) > 25, str_c(str_sub(album, 0, 25), "..."), album)) %>% 
+      mutate(newColName = ifelse(nchar(newCol) > 25, str_c(str_sub(newCol, 0, 25), "..."), newCol)) %>% 
       mutate(rating0 = replace_na(rating, 0)/2) %>% 
       mutate(rating = rating/2) %>% 
-      mutate(text = str_c(artist, " - ", track, "<br>", "Rating: ", rating0)) %>% 
-      ggplot(aes(x = trackNum, y = rating0, group = albumName, color = album, text = text)) + 
-      geom_point(alpha = 0.5) + 
+      mutate(text = str_c(artist, " - ", track, "<br>", album)) %>%
+      ggplot(aes(x = trackNum, y = rating0, group = newColName, color = newCol, text = text)) + 
+      theme(legend.title = element_blank()) +
+      # scale_y_continuous(expand = c(0,0), limits = c(0, 5)) +
+      xlab(NULL) + ylab(NULL) +
+      geom_jitter(alpha = 0.5) + 
       geom_smooth(se = FALSE, span = 3, aes(y = rating))
     plotly::ggplotly(tooltip = 'text')
   })
@@ -542,6 +528,7 @@ server <- function(input, output, session) {
                   '#6475C4',
                   '#3B50B2')
       
+      print(unique(values$ratings$album))
       values$ratings %>% 
         mutate(rating = ifelse(rating == 0, NA, rating)) %>% 
         group_by(album) %>% 
@@ -549,14 +536,15 @@ server <- function(input, output, session) {
         na.omit() %>% 
         mutate(x = n()) %>% 
         group_by(album, x, y) %>% summarise(avRat = mean(rating), .groups = 'drop') %>% 
-        mutate(album = ifelse(nchar(album) > 15, 
-                              str_c(str_sub(album, 0, 13), "..."),
-                              album)) %>% 
+        mutate(albumName = as.character(album)) %>% 
+        mutate(album = ifelse(nchar(albumName) > 15, 
+                              str_c(str_sub(albumName, 0, 13), "..."),
+                              albumName)) %>% 
         arrange(avRat) %>% 
-        mutate(album = str_c(album, "\n", "(", round(avRat, 1), ")")) %>% 
-        mutate(album = forcats::fct_inorder(album)) %>% 
+        mutate(albumName = str_c(albumName, "\n", "(", round(avRat, 1), ")")) %>% 
+        mutate(album = forcats::fct_inorder(albumName)) %>% 
         mutate(compRat = (x/y)*avRat) %>% 
-        select(-x, -y) %>% 
+        select(-x, -y, -albumName) %>% 
         gather(-album, key = series, value = Rating) %>% 
         ggplot(aes(x = album, y = Rating, group = series, fill = series)) +
         geom_col(position = 'identity', color = colors[6], size = 1) +
@@ -575,11 +563,12 @@ server <- function(input, output, session) {
         # na.omit() %>% 
         group_by(album) %>% 
         mutate(avRat = mean(rating, na.rm = TRUE)) %>%
-        mutate(album = ifelse(nchar(album) > 15, 
-                              str_c(str_sub(album, 0, 13), "..."),
-                              album)) %>% 
+        mutate(albumName = as.character(album)) %>% 
+        mutate(albumName = ifelse(nchar(albumName) > 15, 
+                              str_c(str_sub(albumName, 0, 13), "..."),
+                              albumName)) %>% 
         mutate(rating = ifelse(is.na(rating), 0, rating)) %>% 
-        mutate(albumLegend = str_c(album, ' (', round(avRat, 1), ')')) %>%
+        mutate(albumLegend = str_c(albumName, ' (', round(avRat, 1), ')')) %>%
         add_count() %>%
         mutate(smooth = ifelse(n > 3,
                                predict(
