@@ -39,7 +39,8 @@ plexDB <- read_csv('plexDB.csv')
 source('getLastfmShiny.R')
 source('getSlugs.R')
 
-refresh = TRUE
+# refresh = TRUE
+refresh = FALSE
 
 # Run the function
 if (refresh) {
@@ -345,30 +346,44 @@ server <- function(input, output, session) {
   # 
   output$yearRatings <- renderPlotly({
     
+    ## Join plexDB and lastfm to get plays/ratings
+    print(input$chooseType)
     ratings <- left_join(
-      plexDB %>% mutate(joinArtist = getSlugs(artist),
-                        joinTrack = getSlugs(track)),
-      values$lastfm %>% mutate(joinArtist = getSlugs(artist),
-                               joinTrack = getSlugs(track)) %>% 
-        count(joinArtist, joinTrack),
-      by = c('joinArtist', 'joinTrack')
-    ) %>% select(artist, track, album, rating, trackNum, discNum, year, n)
-
-    if (input$chooseYear == 'All time') {
-      top10 <- ratings %>% group_by(artist) %>% mutate(n = sum(n)) %>% arrange(desc(n)) %>% ungroup() %>% head(10) %>% pull(artist)
-      ratings <- plexDB %>% 
-        filter(artist %in% top10)
-    } else if (input$chooseYear == 'Last 30 days') {
-      ratings <- filter(plexDB, year >= year(today() - 30))
-    } else {
-      ratings <- filter(plexDB, year == input$chooseYear)
-    }
+      plexDB %>% mutate(
+        newCol = case_when(
+          input$chooseType == 'Artists' ~ getSlugs(artist),
+          input$chooseType == 'Albums' ~ getSlugs(album),
+          input$chooseType == 'Tracks' ~ getSlugs(track)
+        )),
+      values$top10data %>% mutate(newCol = getSlugs(newCol)),
+      by = 'newCol'
+    ) %>% 
+      select(artist, track, album, rating, trackNum, discNum, year)
+    
+    ## If all time, then take top 10 artists
+    # if (input$chooseYear == 'All time') {
+    #   top10 <- ratings %>% 
+    #     group_by(album) %>% 
+    #     tally(wt = n) %>% 
+    #     ungroup() %>% 
+    #     arrange(desc(n)) %>% 
+    #     head(10) %>% 
+    #     pull(album)
+    #   
+    #   ratings <- plexDB %>% 
+    #     filter(album %in% top10)
+    #   
+    # } else if (input$chooseYear == 'Last 30 days') {
+    #   ratings <- filter(plexDB, year >= year(today() - 30))
+    # } else {
+    #   ratings <- filter(plexDB, year == input$chooseYear)
+    # }
     ratings %>% 
-      mutate(album = ifelse(nchar(album) > 15, str_c(str_sub(album, 0, 13), "..."), album)) %>% 
+      mutate(albumName = ifelse(nchar(album) > 25, str_c(str_sub(album, 0, 25), "..."), album)) %>% 
       mutate(rating0 = replace_na(rating, 0)/2) %>% 
       mutate(rating = rating/2) %>% 
       mutate(text = str_c(artist, " - ", track, "<br>", "Rating: ", rating0)) %>% 
-      ggplot(aes(x = trackNum, y = rating0, group = album, color = album, text = text)) + 
+      ggplot(aes(x = trackNum, y = rating0, group = albumName, color = album, text = text)) + 
       geom_point(alpha = 0.5) + 
       geom_smooth(se = FALSE, span = 3, aes(y = rating))
     plotly::ggplotly(tooltip = 'text')
@@ -419,25 +434,30 @@ server <- function(input, output, session) {
       mutate(track = forcats::fct_inorder(track))
     
     print('Getting plex plays')
+    print(values$chooseArtist)
     ## Also get Plex DB dataframe for album ratings (x2)
-    values$ratings <- plexDB %>%
-      # filter(artist == 'Sault') %>%
-      filter(str_to_lower(artist) == str_to_lower(values$chooseArtist)) %>%
-      filter(albumArtist != "Various Artists") %>%
-      group_by(album) %>%
-      add_count() %>%
-      filter(n > 1) %>%
-      ungroup() %>%
-      select(-n) %>%
-       mutate(discNum = replace_na(discNum, 1)) %>% 
-      mutate(album = ifelse(discNum == 1, 
-                            album, 
-                            str_c(album, " (", discNum, ")"))) %>%
-      mutate(
-        rating = replace_na(rating, 0) / 2,
-        album = forcats::fct_rev(album)
-      )
-    print(unique(values$ratings$album))
+    ## But only if the artist is in Plex?
+    if (str_to_lower(values$chooseArtist) %in% str_to_lower(plexDB$artist)) {
+      values$ratings <- plexDB %>%
+        # filter(artist == 'Sault') %>%
+        filter(str_to_lower(artist) == str_to_lower(values$chooseArtist)) %>%
+        filter(albumArtist != "Various Artists") %>%
+        group_by(album) %>%
+        add_count() %>%
+        filter(n > 1) %>%
+        ungroup() %>%
+        select(-n) %>%
+        mutate(discNum = replace_na(discNum, 1)) %>% 
+        mutate(album = ifelse(discNum == 1, 
+                              album, 
+                              str_c(album, " (", discNum, ")"))) %>%
+        mutate(
+          rating = replace_na(rating, 0) / 2,
+          album = forcats::fct_rev(album)
+        )
+      # print(unique(values$ratings$album))
+    }
+    
   })
   
   
