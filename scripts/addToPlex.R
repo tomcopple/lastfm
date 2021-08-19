@@ -88,6 +88,11 @@ nearlyComplete <- plex %>%
     filter(is.na(rating)) %>% 
     add_count(name = 'x') %>% 
     ungroup() %>% 
+    mutate(join = str_to_lower(str_c(artist, track, sep = " - "))) %>% 
+    left_join(lastfm %>% transmute(join = str_to_lower(str_c(artist, track, sep = " - "))),
+              by = 'join') %>% 
+    select(-join) %>% 
+    count(artist, track, rating, key, y, x) %>% 
     filter(y > 3) %>% 
     arrange(x) %>% 
     distinct(artist, .keep_all = TRUE) %>% 
