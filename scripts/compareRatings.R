@@ -36,7 +36,7 @@ pf %>% filter(!is.na(rating)) %>% count(album,sort = T)
 # Albums by Artist --------------------------------------------------------
 
 ## Compare albums by artist?
-compArtist <- "Flying Lotus"
+compArtist <- "The Strokes"
 plexArtist <- filter(plex, str_detect(artist, compArtist)) %>% 
     filter(albumArtist != "Various Artists")
 plexArtist %>% 
@@ -109,7 +109,7 @@ albumList <- plex %>%
     add_count(name = 'y') %>% 
     filter(!is.na(rating)) %>% 
     add_count(name = 'x') %>% 
-    filter(x == y, y >= 3) %>% 
+    filter(x == y, y > 3) %>% 
     summarise(avRat = mean(rating)/2, .groups = 'drop') %>% 
     arrange(desc(avRat))
 albumList %>%
@@ -121,3 +121,6 @@ albumList %>%
     geom_col() + 
     coord_flip()
 
+albumList %>% 
+    mutate(rank = row_number()) %>% 
+    filter(str_detect(albumArtist, compArtist))
