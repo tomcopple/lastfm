@@ -41,7 +41,7 @@ playlist <- lastfm %>%
                    mutate(artist = ifelse(is.na(artist), albumArtist, artist)) %>% 
                    mutate_if(is.character, str_to_lower)) %>% 
     filter(is.na(rating)) %>% 
-    filter(n > 9) %>% 
+    filter(n > 8) %>% 
     add_count() %>% 
     sample_n(size = ifelse(nrow(.) > 25, 25, nrow(.)))
 playlist
@@ -130,3 +130,4 @@ nearlyComplete %>%
             )
         )
     })
+
