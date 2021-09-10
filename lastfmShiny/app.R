@@ -60,6 +60,19 @@ artistList <- lastfm %>%
   arrange(arrangeArtist) %>%
   pull(artist)
 
+removeEve <- function(lastfmDF) {
+  lastfmDF <- lastfmDF %>% 
+    filter(
+      str_detect(artist, "Cocomelon", negate = T),
+      str_detect(artist, "Super Simple", negate = T),
+      str_detect(artist, "Duggee", negate = T),
+      str_detect(artist, "Lullaby", negate = T),
+      str_detect(artist, "Night Garden", negate = T),
+      str_detect(artist, 'Toddler Tunes', negate = T),
+      str_detect(artist, 'Pinkfong', negate = T)
+    )
+  return(lastfmDF)
+}
 
 
 # UI ----------------------------------------------------------------------
@@ -93,6 +106,14 @@ ui <- material_page(
             label = "Select top 10:",
             color = "blue",
             choices = c("Artists", "Albums", "Tracks")
+          )
+        ),
+        material_card(
+          title = "",
+          material_checkbox(
+            input_id = 'removeEve',
+            label = 'Remove Eve tracks',
+            color = 'purple'
           )
         ),
         material_card(
@@ -195,9 +216,15 @@ server <- function(input, output, session) {
   observeEvent({
     input$chooseYear
     input$chooseType
+    input$removeEve
   }, {
     chooseYear <- input$chooseYear
     chooseType <- input$chooseType
+    removeEve <- input$removeEve
+    
+    if (removeEve) {
+      values$lastfm <- removeEve(values$lastfm)
+    }
     
     if (chooseYear == "All time") {
       top10data <- values$lastfm
