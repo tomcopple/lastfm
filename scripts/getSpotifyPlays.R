@@ -71,3 +71,6 @@ trackCount %>% arrange(desc(n)) %>%
     select(artist, track, album, n)
 
 trackCount %>% count(artist, wt = n, sort = T)
+
+trackCount %>% group_by(artist, album) %>% summarise(minPlay = min(n)) %>% 
+    arrange(desc(minPlay))
