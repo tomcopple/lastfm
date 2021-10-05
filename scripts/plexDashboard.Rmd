@@ -250,7 +250,7 @@ renderPlot({
 
 ```
 
-Row
+Row table
 -----------------------------------------------------------------------
 
 ### All albums
@@ -266,7 +266,7 @@ DT::renderDataTable({
     group_by(albumArtist, album) %>% 
     filter(n() >= max(trackNum) - 3) %>% 
     summarise(x = n(), y = sum(!is.na(rating)),
-              avRat = round(mean(rating, na.rm = TRUE) / 2, 1),
+              avRat = round(mean(rating, na.rm = TRUE) / 2, 2),
               .groups = 'drop') %>% 
     filter(x > 2) %>% 
     unite(col = 'match', albumArtist, album, sep = "-", remove = FALSE) %>% 
