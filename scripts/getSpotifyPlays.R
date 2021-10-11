@@ -67,10 +67,16 @@ trackCount <- tracks %>%
               by = c('artist_join', 'track_join')) %>% 
     select(!contains('_join'))
 
+## Top tracks
 trackCount %>% arrange(desc(n)) %>% 
     select(artist, track, album, n)
 
+## Count tracks by artist
 trackCount %>% count(artist, wt = n, sort = T)
 
+## Album with the most complete plays
 trackCount %>% group_by(artist, album) %>% summarise(minPlay = min(n)) %>% 
     arrange(desc(minPlay))
+
+## Any tracks with no plays yet
+trackCount %>% filter(is.na(n))
