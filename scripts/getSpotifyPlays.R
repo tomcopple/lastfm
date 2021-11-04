@@ -76,7 +76,8 @@ trackCount %>% count(artist, wt = n, sort = T)
 
 ## Album with the most complete plays
 trackCount %>% group_by(artist, album) %>% summarise(minPlay = min(n)) %>% 
-    arrange(desc(minPlay))
+    arrange(desc(minPlay)) %>% 
+    filter(str_detect(album, 'Mirror', negate = TRUE))
 
 ## Any tracks with no plays yet
 trackCount %>% filter(is.na(n))
