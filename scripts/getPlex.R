@@ -23,7 +23,8 @@ getPlex <- function(refresh = FALSE) {
                    albumKey    = parentRatingKey,
                 trackNum       = index,
                 discNum        = parentIndex,
-                year           = parentYear
+                year           = parentYear,
+                duration       = duration
             ) %>% 
             mutate(artist = ifelse(is.na(artist), albumArtist, artist)) %>% 
             as_tibble()
