@@ -34,6 +34,12 @@ addKeys <- plex %>%
     filter(n == 1, duration < 900) %>%
     pull(albumKey)
 
+## Anything with 2-3 plays?
+plex %>% 
+    select(albumArtist, artist, album, track,  albumKey, duration) %>% 
+    add_count(albumArtist, album) %>% 
+    filter(n == 2)
+
 addKeys %>% 
     walk(function(x) {
         trackKey <- x
