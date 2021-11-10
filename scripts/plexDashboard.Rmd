@@ -265,6 +265,7 @@ DT::renderDataTable({
   data <- rv$plexYear %>% 
     filter(albumArtist != 'Various Artists') %>% 
     group_by(albumArtist, album) %>% 
+    ## Allow for an album to be missing 3 tracks before max trackNum
     filter(n() >= max(trackNum) - 3) %>% 
     summarise(x = n(), y = sum(!is.na(rating)),
               avRat = round(mean(rating, na.rm = TRUE) / 2, 2),
@@ -291,6 +292,35 @@ DT::renderDataTable({
   DT::datatable(data, options = list(
     bPaginate = TRUE
   ))
+})
+
+```
+
+Row table
+-----------------------------------------------------------------------
+
+### Top Songs
+
+```{r, eval = T, out.width ="100%"}
+DT::renderDataTable({
+  data <- rv$plexYear %>% 
+      select(artist, track, rating) %>% 
+      filter(rating > 6) %>% 
+    unite(col = 'match', artist, track, sep = "-", remove = FALSE) %>% 
+    mutate(match = getSlugs(match)) %>% 
+    left_join(., 
+              rv$lastfm %>%
+              # lastfm %>% 
+                unite(col = 'match', artist, track, sep = "-", remove = TRUE) %>% 
+                mutate(match = getSlugs(match)) %>% 
+                count(match, sort = T, name = 'Plays'),
+              by = 'match') %>% 
+    select(-match) %>% 
+    arrange(desc(rating), desc(Plays)) 
+    
+    DT::datatable(data, options = list(
+        bPaginate = TRUE
+        ))
 })
 
 ```
