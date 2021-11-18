@@ -71,6 +71,10 @@ trackCount <- tracks %>%
 trackCount %>% arrange(desc(n)) %>% 
     select(artist, track, album, n)
 
+## Bottom tracks
+trackCount %>% arrange(n) %>% 
+    select(artist, track, album, n)
+
 ## Count tracks by artist
 trackCount %>% count(artist, wt = n, sort = T)
 
