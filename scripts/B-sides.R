@@ -8,12 +8,13 @@ source(here::here('scripts', 'getLastfm.R'))
 lastfm <- getLastfm(F)
 
 ## E.g. 2020
+playlist2021 <- "0vdFNsbGqVvr7TcIY0nVsV" ## won't be the right id soon
 playlist2020 <- "4GEYrbuyTRjAbihKAZ7iIe"
 playlist2019 <- "54u2Bk9Rfp0bPcXZk3juTx"
 playlist2018 <- "5Z0xb2Ox9e5KJIMpQHlD9l"
 playlist2017 <- "5bx7hvsUh7R50ua4zEfrxA"
 playlist2016 <- "0ClWgWedtZRRA59NojlkT1"
-playlist <- playlist2016
+playlist <- playlist2021
 
 # Spotify auth ------------------------------------------------------------
 token <- spotifyr::get_spotify_access_token(
@@ -54,8 +55,8 @@ playDates <- lastfm %>%
     inner_join(tracksReturn) %>% 
     # only keep one track play per day, otherwise includes albums played on repeat
     distinct(match, date) %>% 
-    count(date) %>% 
-    filter(n > 2) %>% 
+    add_count(date) %>% 
+    filter(n > 3) %>% 
     pull(date)
 
 ## Filter lastfm for those dates
@@ -68,6 +69,19 @@ leftovers <- lastfm %>%
     filter(!match %in% tracksReturn$match) %>% 
     filter(n > 3)
 leftovers
+
+## In case you want to check why a song is there
+inner_join(
+    filter(lastfm, str_detect(track, 'Leimert')) %>% mutate(date = as_date(date)),
+    lastfm %>% unite(artist, track, sep = " ", col = 'match') %>% 
+        transmute(match = getSlugs(match),
+                  date = as_date(date)) %>% 
+        inner_join(tracksReturn) %>% 
+        # only keep one track play per day, otherwise includes albums played on repeat
+        distinct(match, date) %>% 
+        add_count(date)
+)
+        
 
 ## Add to dataframe
 # bsides <- leftovers

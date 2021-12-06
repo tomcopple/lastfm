@@ -5,10 +5,6 @@ library(tidyverse);library(httr);library(jsonlite)
 source(here::here('scripts', 'getLastfm.R'))
 source(here::here('scripts', 'getSlugs.R'))
 
-# List of playlists -------------------------------------------------------
-newSongs <- '6jGRKTY1lxycGw4ZVXm3DR'
-newMusic <- "5vQN8Cq4bbav7Dt31mTwr6"
-
 
 # Spotify auth ------------------------------------------------------------
 endpoint <- httr::oauth_endpoint(
@@ -18,16 +14,44 @@ endpoint <- httr::oauth_endpoint(
 app <- httr::oauth_app(appname = "last2spot", key = "95bdfb9cb87841208145ede83a2dd878",secret = "2ada4a2188b7420d8833b2fe783e5c03")
 
 spotAuth <- httr::oauth2.0_token(endpoint = endpoint, app = app,
-                                 scope = c('playlist-modify', 'playlist-modify-private'))
+                                 scope = c('playlist-modify', 'playlist-modify-private',
+                                           'playlist-read-private', 'playlist-read-collaborative'))
+
+
+
+# Get list of playlists ---------------------------------------------------
+
+howManyPlaylists <- httr::GET(url = "https://api.spotify.com/v1/users/tomcopple/playlists",
+                              httr::config(token = spotAuth), encode = 'json') %>% 
+    content(., as = 'text') %>% fromJSON() %>% pluck('total')
+
+allPlaylists <- data.frame()
+reps <- howManyPlaylists %/% 50 + 1
+
+for (i in 1:reps) {
+    getPlaylists <- httr::GET(url = "https://api.spotify.com/v1/users/tomcopple/playlists",
+                              httr::config(token = spotAuth), encode = 'json',
+                              query = list(limit = 50, offset = 50 * (i - 1))) %>% 
+        content(., as = 'text') %>% fromJSON() %>% 
+        pluck('items') %>% 
+        select(name, id)
+    allPlaylists <- bind_rows(allPlaylists, getPlaylists)
+}
 
 
 # Download Spotify Tracks -------------------------------------------------
 
 ## Choose playlist
-playlist <- newMusic
+
+playlist <- "2021"
+if (playlist %in% allPlaylists$name) {
+    playlistID <- filter(allPlaylists, name == playlist) %>% pull(id)
+} else {
+    print(glue::glue('Playlist "{playlist}" not found'))
+}
 
 ## Can only get 100 tracks at a time, so need to know how many times to run it
-totalTracks <- httr::GET(url = str_c('https://api.spotify.com/v1/playlists/', playlist, '/tracks'),
+totalTracks <- httr::GET(url = str_c('https://api.spotify.com/v1/playlists/', playlistID, '/tracks'),
                          query = list(fields = "total"),
                          httr::config(token = spotAuth), encode = 'json') %>% 
     content(., as = 'text') %>% fromJSON() %>% pluck('total')
@@ -37,7 +61,7 @@ offsets <- seq.int(from = 0, to = floor(totalTracks/100))
 ## Define function to get tracks
 ## x is offset, i.e. starts at 1 and goes up (defined by i)
 getTracks <- function(x) {
-    tracksRaw <- httr::GET(url = str_c('https://api.spotify.com/v1/playlists/', playlist, '/tracks'),
+    tracksRaw <- httr::GET(url = str_c('https://api.spotify.com/v1/playlists/', playlistID, '/tracks'),
                            query = list(
                                fields = "items(track(artists.name,album(name),track_number,name))",
                                limit = 100, offset = x*100),
