@@ -5,6 +5,10 @@ library(tidyverse);library(httr);library(jsonlite)
 source(here::here('scripts', 'getLastfm.R'))
 source(here::here('scripts', 'getSlugs.R'))
 
+## Get Lastfm history
+lastfm <- getLastfm(T) 
+
+
 
 # Spotify auth ------------------------------------------------------------
 endpoint <- httr::oauth_endpoint(
@@ -77,8 +81,6 @@ getTracks <- function(x) {
 tracks <- map_df(offsets, getTracks)
 tracks
 
-## Get Lastfm history
-lastfm <- getLastfm(T) 
 
 ## Merge together
 trackCount <- tracks %>% 
