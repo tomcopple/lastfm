@@ -34,8 +34,6 @@ keepgoing = TRUE
 
 ## NB If it crashes, check i then start again including that number
 
-
-
 ## Can also tell function to start in a more recent year
 while (keepgoing) {
     url <- str_c(baseurl, i)
