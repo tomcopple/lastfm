@@ -62,7 +62,7 @@ getLastfm <- function(refresh = TRUE) {
                           local_path = "tracks.csv",
                           overwrite = T)
 
-    localData <- readr::read_csv("tracks.csv") %>%
+    localData <- readr::read_csv("tracks.csv", lazy = F) %>%
         mutate(date = lubridate::ymd_hms(date)) %>%
         filter(!is.na(date)) %>%
         as_tibble()
