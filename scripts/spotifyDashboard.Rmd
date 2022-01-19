@@ -135,6 +135,7 @@ trackCount <- tracks %>%
                   count(artist_join, track_join),
               by = c('artist_join', 'track_join')) %>% 
     select(!contains('_join')) %>% 
+  mutate(n = replace_na(n, 0)) %>% 
     select(track_number, artist, track, album, n)
 
 DT::datatable(trackCount, options = list(
