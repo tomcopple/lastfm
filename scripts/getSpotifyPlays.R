@@ -82,6 +82,14 @@ tracks <- map_df(offsets, getTracks)
 tracks
 
 
+## Temporary change for 2021 playlist
+tracks <- tracks %>% 
+    mutate(artist = case_when(
+        artist == 'Bruno Mars' ~ 'Silk Sonic',
+        str_detect(artist, 'The War') ~ 'The War on Drugs',
+        TRUE ~ artist
+    ))
+
 ## Merge together
 trackCount <- tracks %>% 
     mutate(track_join = getSlugs(track),
@@ -110,4 +118,4 @@ trackCount %>% group_by(artist, album) %>% summarise(minPlay = min(n)) %>%
     filter(str_detect(album, 'Mirror', negate = TRUE))
 
 ## Any tracks with no plays yet
-trackCount %>% filter(is.na(n))
+trackCount %>% filter(is.na(n)) %>% View()
