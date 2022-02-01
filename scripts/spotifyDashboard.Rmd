@@ -9,11 +9,12 @@ runtime: shiny
 
 ```{r global, include=FALSE}
 library(flexdashboard);library(tidyverse);library(httr);library(jsonlite);library(shiny);library(DT)
-source('getLastfm.R');source('getSlugs.R')
 print(getwd())
-if (str_detect(getwd(), 'scripts', negate = T)) {
-    setwd('scripts')
+if (str_detect(getwd(), 'scripts', negate = F)) {
+    setwd('..')
 }
+source('scripts/getLastfm.R');source('scripts/getSlugs.R')
+
 lastfm <- getLastfm(F)
 
 ## Spotify Auth
