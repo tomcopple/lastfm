@@ -83,7 +83,9 @@ observeEvent(input$choosePlaylist, {
 observeEvent(eventExpr = input$refreshLastfm,
              handlerExpr = {
                  showNotification('Updating Lastfm...')
+                 setwd("..")
                  rv$lastfm <- getLastfm(T)
+                 setwd('scripts')
                  showNotification('Lastfm updated!', type = 'message')
              })
 ```
