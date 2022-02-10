@@ -17,7 +17,7 @@ library(forcats)
 ## usethis::edit_r_environ('project') then copy to lastfmShiny folder
 ## Won't be committed to github so need to recreate
 readRenviron(".Renviron")
-print(Sys.getenv('LASTFM_USER'))
+print(str_c('Username: ', Sys.getenv('LASTFM_USER')))
 
 ## Import local dropbox token
 # token <- rdrop2::drop_auth()
@@ -138,11 +138,11 @@ ui <- material_page(
           ),
         material_card(
           title = "", plotlyOutput("plotlyBar", height = "100%")
-          ),
-        h3("Plex Summary"),
-        material_card(
-          title = "", plotlyOutput('yearRatings', height = "100%")
-        )
+          )
+        # h3("Plex Summary"),
+        # material_card(
+        #   title = "", plotlyOutput('yearRatings', height = "100%")
+        # )
       )
     )
   ),
@@ -300,6 +300,7 @@ server <- function(input, output, session) {
                          n, k = 30, align = "right"
                        )))
     
+    print("Top 10 plays chart")
     top10plays %>%
       group_by(newCol) %>%
       plot_ly(
@@ -336,6 +337,7 @@ server <- function(input, output, session) {
   
   # Plotly: Top 10 bar ------------------------------------------------------
   
+  print("Plotly bar chart")
   output$plotlyBar <- renderPlotly({
     ## Just a horizontal bar chart showing totals
     values$top10data %>%
@@ -371,36 +373,36 @@ server <- function(input, output, session) {
   
   # Plotly: Album Ratings ------------------------------------------------------
   
-  output$yearRatings <- renderPlotly({
-    
-    ## Join plexDB and lastfm to get plays/ratings
-    print(input$chooseType)
-    ratings <- inner_join(
-      plexDB %>% mutate(
-        newCol = case_when(
-          input$chooseType == 'Artists' ~ getSlugs(artist),
-          input$chooseType == 'Albums' ~ getSlugs(str_c(artist, " - ", album)),
-          input$chooseType == 'Tracks' ~ getSlugs(str_c(artist, " - ", track))
-        )),
-      values$top10data %>% mutate(newCol = getSlugs(newCol)),
-      by = 'newCol'
-    ) %>% 
-      distinct(artist, track, album, rating, trackNum, discNum, year, newCol)
-    
-    print(head(ratings))
-    ratings %>% 
-      mutate(newColName = ifelse(nchar(newCol) > 25, str_c(str_sub(newCol, 0, 25), "..."), newCol)) %>% 
-      mutate(rating0 = replace_na(rating, 0)/2) %>% 
-      mutate(rating = rating/2) %>% 
-      mutate(text = str_c(artist, " - ", track, "<br>", album)) %>%
-      ggplot(aes(x = trackNum, y = rating0, group = newColName, color = newCol, text = text)) + 
-      theme(legend.title = element_blank()) +
-      # scale_y_continuous(expand = c(0,0), limits = c(0, 5)) +
-      xlab(NULL) + ylab(NULL) +
-      geom_jitter(alpha = 0.5) + 
-      geom_smooth(se = FALSE, span = 3, aes(y = rating))
-    plotly::ggplotly(tooltip = 'text')
-  })
+  # output$yearRatings <- renderPlotly({
+  #   
+  #   ## Join plexDB and lastfm to get plays/ratings
+  #   message('input$chooseType ', input$chooseType)
+  #   ratings <- inner_join(
+  #     plexDB %>% mutate(
+  #       newCol = case_when(
+  #         input$chooseType == 'Artists' ~ getSlugs(artist),
+  #         input$chooseType == 'Albums' ~ getSlugs(str_c(artist, " - ", album)),
+  #         input$chooseType == 'Tracks' ~ getSlugs(str_c(artist, " - ", track))
+  #       )),
+  #     values$top10data %>% mutate(newCol = getSlugs(newCol)),
+  #     by = 'newCol'
+  #   ) %>% 
+  #     distinct(artist, track, album, rating, trackNum, discNum, year, newCol)
+  #   
+  #   # print(head(ratings))
+  #   ratings %>% 
+  #     mutate(newColName = ifelse(nchar(newCol) > 25, str_c(str_sub(newCol, 0, 25), "..."), newCol)) %>% 
+  #     mutate(rating0 = replace_na(rating, 0)/2) %>% 
+  #     mutate(rating = rating/2) %>% 
+  #     mutate(text = str_c(artist, " - ", track, "<br>", album)) %>%
+  #     ggplot(aes(x = trackNum, y = rating0, group = newColName, color = newCol, text = text)) + 
+  #     theme(legend.title = element_blank()) +
+  #     # scale_y_continuous(expand = c(0,0), limits = c(0, 5)) +
+  #     xlab(NULL) + ylab(NULL) +
+  #     geom_jitter(alpha = 0.5) + 
+  #     geom_smooth(se = FALSE, span = 3, aes(y = rating))
+  #   plotly::ggplotly(tooltip = 'text')
+  # })
   
   
   
@@ -480,24 +482,27 @@ server <- function(input, output, session) {
   output$trackPlays <- renderPlotly({
     trackPlays <- values$plays
     
+    numberOfAlbums <- length(unique(trackPlays$album))
+    
     # Plotly. Very basic.
+    print("Plotly artist time series")
     plot_ly(
       trackPlays,
       x = ~ date,
       y = ~ track,
       color = ~ album,
-      type = "scatter",
-      colors = "Spectral",
+      type = "scatter", mode = 'markers',
+      colors = colorRampPalette(brewer.pal(11, "Spectral"))(numberOfAlbums),
       text = ~ paste0("(", album, ") ", track),
+      ## Fudge to get chart size to adapt to number of albums
+      height = (450 + length(unique(
+          trackPlays$album
+      )) * 10),
       hoverinfo = "text"
     ) %>%
       plotly::layout(
         title = paste("Track plays by", values$chooseArtist),
         yaxis = list(visible = FALSE),
-        ## Fudge to get chart size to adapt to number of albums
-        height = (450 + length(unique(
-          trackPlays$album
-        )) * 10),
         # For artists with lots of albums, the legend goes crazy, so just ignore it.
         legend = list(orientation = "h"),
         xaxis = list(title = NA),
@@ -515,6 +520,10 @@ server <- function(input, output, session) {
       count(album) %>%
       mutate(albumGroup = forcats::fct_reorder(album, n))
     
+    numberOfAlbums <- length(unique(albumPlays$album))
+    
+    
+    print("Plotly album plays bar chart")
     plot_ly(
       data = albumPlays,
       x = ~ n,
@@ -524,7 +533,7 @@ server <- function(input, output, session) {
       textposition = "outside",
       orientation = "h",
       color = ~ albumGroup,
-      colors = "Spectral",
+      colors = colorRampPalette(brewer.pal(11, "Spectral"))(numberOfAlbums),
       hoverinfo = "none"
     ) %>%
       plotly::layout(
@@ -587,7 +596,7 @@ server <- function(input, output, session) {
     if (str_to_lower(values$chooseArtist) %in% str_to_lower(plexDB$artist)) {
       ratingsPlot2 <- values$ratings %>%
         mutate(rating = ifelse(rating == 0, NA, rating)) %>% 
-        # na.omit() %>% 
+        na.omit() %>%
         group_by(album) %>% 
         mutate(avRat = mean(rating, na.rm = TRUE)) %>%
         mutate(albumName = as.character(album)) %>% 
@@ -603,23 +612,19 @@ server <- function(input, output, session) {
                                ),
                                avRat))
      
-      plot_ly(
-        ratingsPlot2,
-        x = ~ trackNum,
-        y = ~ smooth,
-        type = 'scatter',
-        mode = 'lines',
-        color = ~ albumLegend,
-        legendgroup = ~ albumLegend,
-        text = ~ albumLegend,
-        hoverinfo = 'text'
-      ) %>%
-        add_markers(
-          y = ~ rating,
-          showlegend = FALSE,
-          legendgroup = ~ albumLegend,
-          text = ~ str_c(track, ' (', rating, ')<br>', albumLegend),
-          opacity = 0.5
+      numberOfAlbums <- length(unique(ratingsPlot2$albumLegend))
+      plot_ly() %>% 
+          plotly::add_lines(data = ratingsPlot2,
+            x = ~trackNum,y = ~smooth, line = list(shape = 'spline'),
+            text = ~albumLegend, hoverinfo = 'text',
+            color = ~albumLegend, legendgroup = ~albumLegend,
+            colors = colorRampPalette(brewer.pal(11, "Spectral"))(numberOfAlbums)
+          ) %>% 
+          plotly::add_markers(data = ratingsPlot2,
+              x = ~trackNum, y = ~ rating, showlegend = FALSE,
+              legendgroup = ~ albumLegend, color = ~albumLegend,
+              text = ~ str_c(track, ' (', rating, ')<br>', albumLegend),
+              opacity = 0.5, hoverinfo = 'text'
         ) %>%
         plotly::layout(
           xaxis = list(title = NA, zeroline = FALSE),
