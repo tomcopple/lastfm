@@ -47,7 +47,7 @@ for (i in 1:reps) {
 
 ## Choose playlist
 
-playlist <- "2021"
+playlist <- "New Music"
 if (playlist %in% allPlaylists$name) {
     playlistID <- filter(allPlaylists, name == playlist) %>% pull(id)
 } else {
@@ -82,13 +82,14 @@ tracks <- map_df(offsets, getTracks)
 tracks
 
 
-## Temporary change for 2021 playlist
+## Some manual changes we have to do here
 tracks <- tracks %>% 
     mutate(artist = case_when(
         artist == 'Bruno Mars' ~ 'Silk Sonic',
         str_detect(artist, 'The War') ~ 'The War on Drugs',
         TRUE ~ artist
-    ))
+    )) %>% 
+    filter(str_detect(track, 'caprisongs interlude', negate = TRUE))
 
 ## Merge together
 trackCount <- tracks %>% 
@@ -99,6 +100,7 @@ trackCount <- tracks %>%
                             artist_join = getSlugs(artist)) %>% 
                   count(artist_join, track_join),
               by = c('artist_join', 'track_join')) %>% 
+    mutate(n = replace_na(n, 0)) %>% 
     select(!contains('_join'))
 
 ## Top tracks
@@ -109,7 +111,7 @@ trackCount %>% arrange(desc(n)) %>%
 trackCount %>% arrange(n) %>% 
     select(artist, track, album, n)
 
-## Count tracks by artist
+    ## Count tracks by artist
 trackCount %>% count(artist, wt = n, sort = T)
 
 ## Album with the most complete plays
@@ -117,5 +119,3 @@ trackCount %>% group_by(artist, album) %>% summarise(minPlay = min(n)) %>%
     arrange(desc(minPlay)) %>% 
     filter(str_detect(album, 'Mirror', negate = TRUE))
 
-## Any tracks with no plays yet
-trackCount %>% filter(is.na(n)) %>% View()
