@@ -111,7 +111,7 @@ trackCount %>% arrange(desc(n)) %>%
 trackCount %>% arrange(n) %>% 
     select(artist, track, album, n)
 
-    ## Count tracks by artist
+## Count tracks by artist
 trackCount %>% count(artist, wt = n, sort = T)
 
 ## Album with the most complete plays
