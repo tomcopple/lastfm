@@ -164,8 +164,6 @@ shiny::radioButtons(inputId = "chooseYear", label = "Select year:",
               mutate(choiceLabel = ifelse(
                 year > 1999, year, 10*floor(year/10)
               )) %>% 
-              group_by(albumArtist, album) %>% 
-              filter(n() > 2, n() >= max(trackNum) - 3) %>% ungroup() %>% 
               distinct(albumArtist, album, choiceLabel) %>% 
               count(choiceLabel) %>% 
               arrange(choiceLabel) %>% 
