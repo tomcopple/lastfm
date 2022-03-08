@@ -45,7 +45,7 @@ for (i in 1:reps) {
 
 # Download Spotify Tracks -------------------------------------------------
 
-## Choose playlist
+## Choose playlist ----
 
 playlist <- "New Music"
 if (playlist %in% allPlaylists$name) {
@@ -103,19 +103,22 @@ trackCount <- tracks %>%
     mutate(n = replace_na(n, 0)) %>% 
     select(!contains('_join'))
 
-## Top tracks
+### Top tracks ----
 trackCount %>% arrange(desc(n)) %>% 
     select(artist, track, album, n)
 
-## Bottom tracks
+### Bottom tracks ----
 trackCount %>% arrange(n) %>% 
     select(artist, track, album, n)
 
-## Count tracks by artist
+### Count tracks by artist ----
 trackCount %>% count(artist, wt = n, sort = T)
 
-## Album with the most complete plays
+### Album with the most complete plays ----
 trackCount %>% group_by(artist, album) %>% summarise(minPlay = min(n)) %>% 
     arrange(desc(minPlay)) %>% 
     filter(str_detect(album, 'Mirror', negate = TRUE))
 
+### Lowest played song per artist ----
+trackCount %>% group_by(artist, album) %>% 
+    filter(n == min(n))
