@@ -121,4 +121,5 @@ trackCount %>% group_by(artist, album) %>% summarise(minPlay = min(n)) %>%
 
 ### Lowest played song per artist ----
 trackCount %>% group_by(artist, album) %>% 
-    filter(n == min(n)) %>% ungroup()
+    filter(n == min(n)) %>% ungroup() %>% 
+    sample_n(10)
