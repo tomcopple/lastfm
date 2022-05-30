@@ -60,7 +60,7 @@ totalTracks <- httr::GET(url = str_c('https://api.spotify.com/v1/playlists/', pl
                          httr::config(token = spotAuth), encode = 'json') %>% 
     content(., as = 'text') %>% fromJSON() %>% pluck('total')
 
-offsets <- seq.int(from = 0, to = floor(totalTracks/100))
+offsets <- seq.int(from = 0, to = floor((totalTracks-1)/100))
 
 ## Define function to get tracks
 ## x is offset, i.e. starts at 1 and goes up (defined by i)
@@ -103,6 +103,8 @@ trackCount <- tracks %>%
     mutate(n = replace_na(n, 0)) %>% 
     select(!contains('_join'))
 
+trackCount
+
 ### Top tracks ----
 trackCount %>% arrange(desc(n)) %>% 
     select(artist, track, album, n)
@@ -121,5 +123,8 @@ trackCount %>% group_by(artist, album) %>% summarise(minPlay = min(n)) %>%
 
 ### Lowest played song per artist ----
 trackCount %>% group_by(artist, album) %>% 
-    filter(n == min(n)) %>% ungroup() %>% 
-    sample_n(10)
+    arrange(n) %>% 
+    slice(1) %>% 
+    ungroup()  %>% 
+    slice_sample(n = 10) %>% 
+    arrange(n)
