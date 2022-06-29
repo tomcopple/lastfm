@@ -6,6 +6,10 @@
 getLastfm <- function(refresh = TRUE) {
     library(tidyverse);library(rdrop2);library(here)
     
+    token <- drop_auth(new_user = T)
+    # saveRDS(token, file = 'token.RDS')
+    
+    # token <- readRDS('token.RDS')
     rdrop2::drop_download("R/lastfm/tracks.csv",
                           local_path = "tempData/tracks.csv",
                           overwrite = T)
