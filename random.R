@@ -1,5 +1,5 @@
 
-library(tidyverse);library(gganimate)
+library(tidyverse);library(gganimate);require(gifski)
 dat <- data.frame(n = 1)
 
 for(i in 1:25) { dat[[as.character(i)]] <- 0}
