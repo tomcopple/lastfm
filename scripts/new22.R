@@ -13,11 +13,12 @@ played22 <- tracks %>% filter(year(date) == 2022) %>%
     arrange(desc(n))
 
 playedBefore <- tracks %>% 
-    filter(year(date) < 2022) %>% 
+    filter(year(date) < 2021) %>% 
     unite(artist, album, col = 'album', sep = " - ") %>% 
     count(album) %>% 
     filter(n >= 10) %>% 
     arrange(desc(n))
 
 anti_join(played22, playedBefore, by = 'album') %>% 
+    filter(str_detect(album, 'Motown Singles', negate = T)) %>% 
     arrange(n)
