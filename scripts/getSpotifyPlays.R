@@ -86,6 +86,7 @@ tracks
 tracks <- tracks %>% 
     mutate(artist = case_when(
         artist == 'Bruno Mars' ~ 'Silk Sonic',
+        artist == 'Arthur Jeffes' ~ 'Penguin Cafe',
         str_detect(artist, 'The War') ~ 'The War on Drugs',
         TRUE ~ artist
     )) %>% 
@@ -128,3 +129,4 @@ trackCount %>% group_by(artist, album) %>%
     ungroup()  %>% 
     slice_sample(n = 10) %>% 
     arrange(n)
+
