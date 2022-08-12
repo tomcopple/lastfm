@@ -145,8 +145,7 @@ minPlays <- trackCount %>%
     top_n(-1) %>% 
     ## If more than one per artist/album just take random
     slice_sample(n = 1) %>% 
-    ## get spotify ID
-    pull(id)
+    arrange(n)
 
 ## 2. top10 ----
 top10 <- trackCount %>% 
@@ -160,6 +159,6 @@ top10 <- trackCount %>%
     
 ## Then try to send them all to the playlist
 httr::PUT(url = str_c('https://api.spotify.com/v1/playlists/', "1BBr03knQFBNoj3EUN2rpm", '/tracks'),
-              body = list(uris = str_c('spotify:track:', na.omit(minPlays))),
+              body = list(uris = str_c('spotify:track:', minPlays$id)),
               httr::config(token = spotAuth), encode = 'json'
     )
