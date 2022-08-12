@@ -136,6 +136,8 @@ trackCount %>% group_by(artist, album) %>%
 
 ## Going to use the same old playlist called R as can't be bothered to start a new one
 ## But NB need the track ID from Spotify
+
+## 1. minPlays ----
 minPlays <- trackCount %>% 
     group_by(artist, album) %>% 
     arrange(n) %>% 
@@ -144,6 +146,15 @@ minPlays <- trackCount %>%
     ## If more than one per artist/album just take random
     slice_sample(n = 1) %>% 
     ## get spotify ID
+    pull(id)
+
+## 2. top10 ----
+top10 <- trackCount %>% 
+    top_n(10) %>% 
+    ## can't quite figure out best way of doing this
+    ## Might have more than ten, but always want the most played anyway
+    ## Just take random sample for now, even if you miss the max n
+    slice_sample(n = 10) %>% 
     pull(id)
 
     
