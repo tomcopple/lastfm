@@ -67,7 +67,7 @@ offsets <- seq.int(from = 0, to = floor((totalTracks-1)/100))
 getTracks <- function(x) {
     tracksRaw <- httr::GET(url = str_c('https://api.spotify.com/v1/playlists/', playlistID, '/tracks'),
                            query = list(
-                               fields = "items(track(artists.name,album(name),track_number,name))",
+                               fields = "items(track(artists.name,album(name),track_number,name, id))",
                                limit = 100, offset = x*100),
                            httr::config(token = spotAuth), encode = 'json'
     )
@@ -130,3 +130,25 @@ trackCount %>% group_by(artist, album) %>%
     slice_sample(n = 10) %>% 
     arrange(n)
 
+
+
+# Send to Spotify Playlist ------------------------------------------------
+
+## Going to use the same old playlist called R as can't be bothered to start a new one
+## But NB need the track ID from Spotify
+minPlays <- trackCount %>% 
+    group_by(artist, album) %>% 
+    arrange(n) %>% 
+    ## Filter for lowest plays
+    top_n(-1) %>% 
+    ## If more than one per artist/album just take random
+    slice_sample(n = 1) %>% 
+    ## get spotify ID
+    pull(id)
+
+    
+## Then try to send them all to the playlist
+httr::PUT(url = str_c('https://api.spotify.com/v1/playlists/', "1BBr03knQFBNoj3EUN2rpm", '/tracks'),
+              body = list(uris = str_c('spotify:track:', na.omit(minPlays))),
+              httr::config(token = spotAuth), encode = 'json'
+    )
