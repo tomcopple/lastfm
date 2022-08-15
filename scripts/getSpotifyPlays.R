@@ -146,6 +146,7 @@ minPlays <- trackCount %>%
     ## If more than one per artist/album just take random
     slice_sample(n = 1) %>% 
     arrange(n)
+minPlays
 
 ## 2. top10 ----
 top10 <- trackCount %>% 
