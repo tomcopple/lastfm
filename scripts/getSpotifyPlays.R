@@ -159,6 +159,9 @@ top10
 
 ## Then try to send them all to the playlist
 httr::PUT(url = str_c('https://api.spotify.com/v1/playlists/', "1BBr03knQFBNoj3EUN2rpm", '/tracks'),
-              body = list(uris = str_c('spotify:track:', top10$id)),
+              body = list(uris = str_c('spotify:track:', 
+                                       minPlays$id
+                                       # top10$id
+                                       )),
               httr::config(token = spotAuth), encode = 'json'
     )
