@@ -90,6 +90,10 @@ tracks <- tracks %>%
         str_detect(artist, 'The War') ~ 'The War on Drugs',
         TRUE ~ artist
     )) %>% 
+    mutate(track = case_when(
+        artist == 'Omar Apollo' & str_detect(track, 'Evergreen') ~ 'Evergreen',
+        TRUE ~ track
+    )) %>% 
     filter(str_detect(track, 'caprisongs interlude', negate = TRUE))
 
 ## Merge together
