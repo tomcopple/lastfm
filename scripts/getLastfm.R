@@ -3,10 +3,13 @@
 
 # refresh = FALSE means just reading the csv.
 
-getLastfm <- function(refresh = TRUE) {
+getLastfm <- function(refresh = TRUE, refresh_token = TRUE) {
+    
+    ## NB Only need to refresh token every few hours
+    ## So can set to false and try if it's soon after the last one
     library(tidyverse);library(rdrop2);library(here)
     
-    token <- drop_auth(new_user = T)
+    token <- drop_auth(new_user = refresh_token)
     # saveRDS(token, file = 'token.RDS')
     
     # token <- readRDS('token.RDS')
