@@ -6,7 +6,7 @@ source(here::here('scripts', 'getLastfm.R'))
 source(here::here('scripts', 'getSlugs.R'))
 
 ## Get Lastfm history
-lastfm <- getLastfm(T) 
+lastfm <- getLastfm(T, F) 
 
 
 
@@ -165,8 +165,15 @@ top10
 ## Then try to send them all to the playlist
 httr::PUT(url = str_c('https://api.spotify.com/v1/playlists/', "1BBr03knQFBNoj3EUN2rpm", '/tracks'),
               body = list(uris = str_c('spotify:track:', 
-                                       # minPlays$id
-                                       top10$id
+                                       minPlays$id
+                                       # top10$id
                                        )),
               httr::config(token = spotAuth), encode = 'json'
     )
+
+httr::PUT(url = str_c('https://api.spotify.com/v1/playlists/', "1Th3m2O6NYvmx1rn5ymsYu", '/tracks'),
+          body = list(uris = str_c('spotify:track:', 
+                                   top10$id
+          )),
+          httr::config(token = spotAuth), encode = 'json'
+)
