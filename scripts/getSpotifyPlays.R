@@ -158,14 +158,15 @@ top10 <- trackCount %>%
     ## can't quite figure out best way of doing this
     ## Might have more than ten, but always want the most played anyway
     ## Just take random sample for now, even if you miss the max n
-    slice_sample(n = 10) 
+    slice_sample(n = 10) %>% 
+    arrange(artist)
 top10    
 
 ## Then try to send them all to the playlist
 httr::PUT(url = str_c('https://api.spotify.com/v1/playlists/', "1BBr03knQFBNoj3EUN2rpm", '/tracks'),
               body = list(uris = str_c('spotify:track:', 
-                                       minPlays$id
-                                       # top10$id
+                                       # minPlays$id
+                                       top10$id
                                        )),
               httr::config(token = spotAuth), encode = 'json'
     )
