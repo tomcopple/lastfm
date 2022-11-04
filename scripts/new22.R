@@ -23,5 +23,9 @@ anti_join(played22, playedBefore, by = 'album') %>%
     filter(str_detect(album, 'Motown Singles', negate = T),
            str_detect(album, 'Classical Lullabies', negate = T),
            str_detect(album, 'Highway Strip', negate = T),
-           str_detect(album, 'Superworm', negate = T)) %>% 
+           str_detect(album, 'Superworm', negate = T),
+           ## Dargz is all singles
+           str_detect(album, 'Dargz', negate = T),
+           ## Kaytranada is a 2021 EP
+           str_detect(album, 'KAYTRANADA', negate = T)) %>% 
     arrange(n)
