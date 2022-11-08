@@ -9,11 +9,11 @@ played22 <- tracks %>% filter(year(date) == 2022) %>%
     na.omit() %>% 
     unite(artist, album, col = 'album', sep = " - ") %>% 
     count(album) %>% 
-    filter(n >= 10) %>% 
+    filter(n >= 9) %>% 
     arrange(desc(n))
 
 playedBefore <- tracks %>% 
-    filter(year(date) < 2021) %>% 
+    filter(year(date) < 2022) %>% 
     unite(artist, album, col = 'album', sep = " - ") %>% 
     count(album) %>% 
     filter(n >= 5) %>%
@@ -27,5 +27,9 @@ anti_join(played22, playedBefore, by = 'album') %>%
            ## Dargz is all singles
            str_detect(album, 'Dargz', negate = T),
            ## Kaytranada is a 2021 EP
-           str_detect(album, 'KAYTRANADA', negate = T)) %>% 
+           str_detect(album, 'KAYTRANADA', negate = T),
+           str_detect(album, 'Arlo Parks', negate = T),
+           str_detect(album, 'Please Do Not Lean', negate = T)) %>% 
     arrange(n)
+
+    
