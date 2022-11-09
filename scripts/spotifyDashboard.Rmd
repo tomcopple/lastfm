@@ -11,9 +11,10 @@ runtime: shiny
 library(flexdashboard);library(tidyverse);library(httr);library(jsonlite);library(shiny);library(DT)
 print(getwd())
 if (str_detect(getwd(), 'scripts', negate = F)) {
-    setwd('..')
+    source('getLastfm.R');source('getSlugs.R')
+} else {
+    source('scripts/getLastfm.R');source('scripts/getSlugs.R')    
 }
-source('scripts/getLastfm.R');source('scripts/getSlugs.R')
 
 lastfm <- getLastfm(F)
 

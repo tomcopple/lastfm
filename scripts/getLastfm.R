@@ -9,10 +9,19 @@ getLastfm <- function(refresh = TRUE, refresh_token = TRUE) {
     ## So can set to false and try if it's soon after the last one
     library(tidyverse);library(rdrop2);library(here)
     
-    token <- drop_auth(new_user = refresh_token)
+    ## New system to refresh token - need to add &token_access_type=offline
+    ## to the browser before authenticating token
+    # token <- drop_auth(new_user = refresh_token)
     # saveRDS(token, file = 'token.RDS')
     
-    # token <- readRDS('token.RDS')
+    print('reading token')
+    
+        token <- readRDS('token.RDS')
+    
+    token    
+    token$refresh
+    
+    print('read token')
     rdrop2::drop_download("R/lastfm/tracks.csv",
                           local_path = "tempData/tracks.csv",
                           overwrite = T)
