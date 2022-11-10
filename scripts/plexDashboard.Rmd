@@ -14,11 +14,15 @@ library(flexdashboard);library(tidyverse);library(httr)
 library(lubridate);library(treemapify);library(plotly)
 library(jsonlite);library(rdrop2);library(DT);library(treemapify)
 
+token <- readRDS("dropbox.rds")
+token$refresh()
+
 getPlex <- function(refresh = FALSE) {
   
   if (refresh) {
-    token <- 'ABhPTJsJFC1CsCPKzzhb'
-    plexRaw <- content(GET("http://192.168.1.99:32400/library/sections/3/search?type=10", add_headers("X-Plex-Token" = token)), type = 'text') %>% 
+    # token <- drop_auth(new_user = refresh_token)
+      plexToken <- "zF65xgpGW-UTx9gkX_cp"
+    plexRaw <- content(GET("http://192.168.1.99:32400/library/sections/3/search?type=10", add_headers("X-Plex-Token" = plexToken)), type = 'text') %>% 
       jsonlite::fromJSON() %>% 
       pluck('MediaContainer') %>% 
       pluck('Metadata')
@@ -42,11 +46,11 @@ getPlex <- function(refresh = FALSE) {
     write.csv(plex, file = here::here('tempData', 'plexDB.csv'), 
               row.names = FALSE, fileEncoding = "UTF-8")
     rdrop2::drop_upload(file = here::here('tempData', "plexDB.csv"), 
-                        path = "R/lastfm")
+                        path = "R/lastfm", dtoken = token)
     
   } else {
     
-    plex <- rdrop2::drop_read_csv(file = "R/lastfm/plexDB.csv") %>% 
+    plex <- rdrop2::drop_read_csv(file = "R/lastfm/plexDB.csv", dtoken = token) %>% 
       as_tibble()
     
   }
@@ -59,7 +63,7 @@ getLastfm <- function(refresh = TRUE) {
     library(tidyverse);library(rdrop2);library(here)
     
     rdrop2::drop_download("R/lastfm/tracks.csv",
-                          local_path = "tracks.csv",
+                          local_path = "tracks.csv", dtoken = token,
                           overwrite = T)
 
     localData <- readr::read_csv("tracks.csv", lazy = F) %>%
@@ -109,7 +113,7 @@ getLastfm <- function(refresh = TRUE) {
         
         ## Write a local csv (ignored in git) and upload to Dropbox. 
         write.csv(localData, file = "tracks.csv", row.names = FALSE, fileEncoding = "UTF-8")
-        rdrop2::drop_upload(file = "tracks.csv", path = "R/lastfm")
+        rdrop2::drop_upload(file = "tracks.csv", path = "R/lastfm", dtoken = token)
     }
     
     return(localData)
@@ -141,7 +145,9 @@ removeEve <- function(lastfm) {
       str_detect(artist, "Night Garden", negate = T),
       str_detect(track, 'Night Garden', negate = T),
       str_detect(artist, 'Toddler Tunes', negate = T),
-      str_detect(artist, 'Pinkfong', negate = T)
+      str_detect(artist, 'Pinkfong', negate = T),
+      str_detect(artist, 'Idina Menzel', negate = T),
+      str_detect(artist, 'Stephanie Beatriz', negate = T)
     )
 }
 
