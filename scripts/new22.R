@@ -29,7 +29,10 @@ anti_join(played22, playedBefore, by = 'album') %>%
            ## Kaytranada is a 2021 EP
            str_detect(album, 'KAYTRANADA', negate = T),
            str_detect(album, 'Arlo Parks', negate = T),
-           str_detect(album, 'Please Do Not Lean', negate = T)) %>% 
+           str_detect(album, 'Please Do Not Lean', negate = T),
+           str_detect(album, 'Stereolab', negate = T),
+           str_detect(album, 'Drive My Car', negate = T),
+           str_detect(album,  'Surface', negate = T)) %>% 
     arrange(n)
 
     

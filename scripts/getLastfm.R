@@ -11,7 +11,7 @@ getLastfm <- function(refresh = TRUE, refresh_token = TRUE) {
     
     ## New system to refresh token - need to add &token_access_type=offline
     ## to the browser before authenticating token
-    # token <- drop_auth(new_user = refresh_token)
+    # token <- drop_auth(new_user = T)
     # saveRDS(token, file = 'token.RDS')
     
     print('reading token')
