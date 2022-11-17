@@ -14,13 +14,17 @@ library(flexdashboard);library(tidyverse);library(httr)
 library(lubridate);library(treemapify);library(plotly)
 library(jsonlite);library(rdrop2);library(DT);library(treemapify)
 
+getwd()
+# token <- drop_auth(new_user = T)
+# saveRDS(token, 'scripts/dropbox.rds')
+
 token <- readRDS("dropbox.rds")
 token$refresh()
 
 getPlex <- function(refresh = FALSE) {
   
   if (refresh) {
-    # token <- drop_auth(new_user = refresh_token)
+    
       plexToken <- "zF65xgpGW-UTx9gkX_cp"
     plexRaw <- content(GET("http://192.168.1.99:32400/library/sections/3/search?type=10", add_headers("X-Plex-Token" = plexToken)), type = 'text') %>% 
       jsonlite::fromJSON() %>% 
