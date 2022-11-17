@@ -109,6 +109,7 @@ trackCount <- tracks %>%
     select(!contains('_join'))
 
 trackCount
+
 ### Top tracks ----
 trackCount %>% arrange(desc(n)) %>% 
     select(artist, track, album, n)
