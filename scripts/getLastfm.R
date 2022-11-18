@@ -19,7 +19,7 @@ getLastfm <- function(refresh = TRUE, refresh_token = TRUE) {
         token <- readRDS('token.RDS')
     
     token    
-    token$refresh
+    token$refresh()
     
     print('read token')
     rdrop2::drop_download("R/lastfm/tracks.csv",

@@ -131,7 +131,7 @@ trackCount %>% group_by(artist, album) %>%
     arrange(n) %>% 
     slice(1) %>% 
     ungroup()  %>% 
-    slice_sample(n = 10) %>% 
+    # slice_sample(n = 10) %>% 
     arrange(n)
 
 
