@@ -3,7 +3,7 @@
 getPlexRatings <- function(refresh = FALSE, write = FALSE, printTree = FALSE) {
     library(tidyverse);library(httr);library(lubridate);library(rdrop2);library(treemapify)
     source('scripts/getPlex.R')
-    token <- 'ABhPTJsJFC1CsCPKzzhb'
+    token <- 'zF65xgpGW-UTx9gkX_cp'
     
     ## Music is section 5, need to search '10' to get all tracks
     if(refresh) {
