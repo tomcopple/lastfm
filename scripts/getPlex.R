@@ -5,7 +5,7 @@ getPlex <- function(refresh = FALSE) {
     library(tidyverse);library(httr);library(lubridate);library(rdrop2);library(jsonlite)
     
     if (refresh) {
-        token <- 'ABhPTJsJFC1CsCPKzzhb'
+        token <- 'zF65xgpGW-UTx9gkX_cp'
         plexRaw <- content(GET("http://192.168.1.99:32400/library/sections/3/search?type=10", 
                                  add_headers("X-Plex-Token" = token)), type = 'text') %>% 
             jsonlite::fromJSON() %>% 
