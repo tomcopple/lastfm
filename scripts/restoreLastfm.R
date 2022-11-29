@@ -32,9 +32,12 @@ pages <- ceiling(howMany/200)
 i <- 1
 keepgoing = TRUE
 
+## Can also tell function to stop once it hits a certain date
+stopDate <- lubridate::ymd("2000-01-01")
+
+
 ## NB If it crashes, check i then start again including that number
 
-## Can also tell function to start in a more recent year
 while (keepgoing) {
     url <- str_c(baseurl, i)
     
@@ -63,9 +66,14 @@ while (keepgoing) {
         keepgoing <- FALSE
     }
     
+    if(min(restore$date) <= stopDate) {
+        keepgoing <- FALSE
+    }
+    
 }
 
-restoreFinal <- as_tibble(restore)
+restoreFinal <- as_tibble(restore) %>% 
+    filter(date >= stopDate)
 
 ## Import current lastfm data
 source('scripts/getLastfm.R')
@@ -74,7 +82,8 @@ lastfm <- getLastfm(F)
 ## And replace with new data
 newLastfm <- filter(lastfm, date < min(restoreFinal$date)) %>% 
     bind_rows(restoreFinal) %>%
-    arrange(date)
+    arrange(date) %>% 
+    distinct()
 
 ## Save and upload a backup copy and the master copy
 write.csv(newLastfm, file = here::here('tempData', str_c(today(), '-restoreLastfm.csv')), 
