@@ -21,6 +21,7 @@ getwd()
 token <- readRDS("dropbox.rds")
 token$refresh()
 
+# Functions -----
 getPlex <- function(refresh = FALSE) {
   
   if (refresh) {
@@ -54,8 +55,12 @@ getPlex <- function(refresh = FALSE) {
     
   } else {
     
-    plex <- rdrop2::drop_read_csv(file = "R/lastfm/plexDB.csv", dtoken = token) %>% 
-      as_tibble()
+      rdrop2::drop_download("R/lastfm/plexDB.csv",
+                          local_path = "plexDB.csv", dtoken = token,
+                          overwrite = T)
+
+    plex <- readr::read_csv("plexDB.csv", lazy = F) %>%
+       as_tibble()
     
   }
   
@@ -151,7 +156,8 @@ removeEve <- function(lastfm) {
       str_detect(artist, 'Toddler Tunes', negate = T),
       str_detect(artist, 'Pinkfong', negate = T),
       str_detect(artist, 'Idina Menzel', negate = T),
-      str_detect(artist, 'Stephanie Beatriz', negate = T)
+      str_detect(artist, 'Stephanie Beatriz', negate = T),
+      str_detect(artist, 'Dwayne Johnson', negate = T)
     )
 }
 
