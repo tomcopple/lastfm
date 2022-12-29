@@ -31,7 +31,7 @@ rdrop2:::drop_download(path = 'R/lastfm/plexMasterRatings.csv',
                        overwrite = T)
 ratings <- read_csv('plexMasterRatings.csv')
 
-rdrop2::drop_download(path = 'R/lastfm/plexDB.csv',
+    rdrop2::drop_download(path = 'R/lastfm/plexDB.csv',
                       local_path = 'plexDB.csv',
                       overwrite = T)
 
