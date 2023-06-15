@@ -26,7 +26,7 @@ getPlex <- function(refresh = FALSE) {
   
   if (refresh) {
     
-      plexToken <- "zF65xgpGW-UTx9gkX_cp"
+      plexToken <- "YTbYV3s5vkVVco6stFDW"
     plexRaw <- content(GET("http://192.168.1.99:32400/library/sections/3/search?type=10", add_headers("X-Plex-Token" = plexToken)), type = 'text') %>% 
       jsonlite::fromJSON() %>% 
       pluck('MediaContainer') %>% 
@@ -173,7 +173,8 @@ Sidebar {.sidebar data-width=250}
 ```{r}
 shiny::radioButtons(inputId = "chooseYear", label = "Select year:",
             choiceValues = c("All", '1950', '1960', '1970', '1980', '1990', 
-                        c(2000:max(plex %>% na.omit() %>% pull(year)))), 
+    ## This used to be plex %>% na.omit %>% pull(year), can't remember why.
+    c(2000:max(plex %>% filter(!is.na(year)) %>% pull(year)))), 
             choiceNames = c("All time", 
                             plex %>%
               filter(year >= 1950, albumArtist != 'Various Artists') %>% 
@@ -288,7 +289,8 @@ DT::renderDataTable({
     unite(col = 'match', albumArtist, album, sep = "-", remove = FALSE) %>% 
     mutate(match = getSlugs(match)) %>% 
     left_join(., 
-              rv$lastfm %>% 
+              # rv$lastfm %>% 
+              lastfm %>% 
                 unite(col = 'match', artist, album, sep = "-", remove = TRUE) %>% 
                 mutate(match = getSlugs(match)) %>% 
                 count(match, sort = T, name = 'Plays'),
@@ -323,8 +325,8 @@ DT::renderDataTable({
     unite(col = 'match', artist, track, sep = "-", remove = FALSE) %>% 
     mutate(match = getSlugs(match)) %>% 
     left_join(., 
-              rv$lastfm %>%
-              # lastfm %>% 
+              # rv$lastfm %>%
+              lastfm %>%
                 unite(col = 'match', artist, track, sep = "-", remove = TRUE) %>% 
                 mutate(match = getSlugs(match)) %>% 
                 count(match, sort = T, name = 'Plays'),
