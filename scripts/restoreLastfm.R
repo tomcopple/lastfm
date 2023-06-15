@@ -33,7 +33,7 @@ i <- 1
 keepgoing = TRUE
 
 ## Can also tell function to stop once it hits a certain date
-stopDate <- lubridate::ymd("2000-01-01")
+stopDate <- lubridate::ymd("2022-01-01")
 
 
 ## NB If it crashes, check i then start again including that number
