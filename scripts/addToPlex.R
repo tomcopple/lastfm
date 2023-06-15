@@ -5,7 +5,7 @@ library(tidyverse);library(httr);library(lubridate);library(rdrop2)
 source('scripts/getPlex.R')
 source('scripts/getLastfm.R')
 
-token <- 'ABhPTJsJFC1CsCPKzzhb'
+token <- 'YTbYV3s5vkVVco6stFDW'
 
 identity <- content(httr::GET(url = "http://192.168.1.99:32400/identity")) %>% 
     magrittr::extract2('MediaContainer') %>% 
