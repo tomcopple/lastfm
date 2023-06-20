@@ -77,7 +77,7 @@ getPlexRatings <- function(refresh = FALSE, write = FALSE, printTree = FALSE) {
     
     return(plex)
 }
-plex <- getPlexRatings(T, T, T)
+plex <- getPlexRatings(T, F, T)
 
 albumRatings %>% 
     filter(x == y)

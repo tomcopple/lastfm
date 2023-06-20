@@ -44,7 +44,7 @@ playlist <- lastfm %>%
     filter(str_detect(album, 'motown', negate = T),
            str_detect(artist, 'beethoven', negate = T),
            str_detect(artist, 'stars of the lid', negate = T)) %>% 
-    filter(n > 8) %>% 
+    filter(n > 7) %>% 
     add_count() %>% 
     sample_n(size = ifelse(nrow(.) > 25, 25, nrow(.)))
 playlist
@@ -100,6 +100,7 @@ nearlyComplete <- plex %>%
     arrange(x) %>% 
     distinct(artist, .keep_all = TRUE) %>% 
     slice(1:25)
+nearlyComplete
 
 ## Want to delete everything first?
 current <- content(httr::GET(slug2, add_headers("X-Plex-Token" = token))) %>% 
