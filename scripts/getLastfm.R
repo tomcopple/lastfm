@@ -5,30 +5,19 @@
 
 getLastfm <- function(refresh = TRUE) {
     
-    ## NB Only need to refresh token every few hours
-    ## So can set to false and try if it's soon after the last one
-    library(tidyverse);library(httr2);library(here);library(tidyjson)
+    library(tidyverse);library(httr2);library(here)
     
     ## New system to refresh token - need to add &token_access_type=offline
     ## to the browser before authenticating token
     ## Also need to create the tempData folder
-    # if (refresh_token) {
-        # token <- drop_auth(new_user = T)
-    # }
     
-    ## Dropbox auth?
-    
-
 # Dropbox Auth ------------------------------------------------------------
     ## If this doesn't work, then
     # source('scripts/dropboxAuth.R')
     token <- readRDS('token.RDS')
 
-    
-
 # Dropbox Download --------------------------------------------------------
 
-    
     reqDownload <- request("https://content.dropboxapi.com/2/files/download") %>% 
         # req_oauth_auth_code(
         #     client, port = 43451,
