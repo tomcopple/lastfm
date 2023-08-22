@@ -2,7 +2,15 @@
 
 getPlex <- function(refresh = FALSE) {
     
-    library(tidyverse);library(httr);library(lubridate);library(rdrop2);library(jsonlite)
+    library(tidyverse);library(httr);library(lubridate);library(jsonlite);library(httr2)
+    
+    dropboxClient <- oauth_client(
+        id = Sys.getenv('DROPBOX_KEY'),
+        secret = Sys.getenv('DROPBOX_SECRET'),
+        token_url = "https://api.dropboxapi.com/oauth2/token",
+        name = 'Rstudio_TC'
+    )
+    dropboxToken <- readRDS('dropbox.RDS')
     
     if (refresh) {
         token <- "YTbYV3s5vkVVco6stFDW"
@@ -31,14 +39,39 @@ getPlex <- function(refresh = FALSE) {
         
         write.csv(plex, file = here::here('tempData', 'plexDB.csv'), 
                   row.names = FALSE, fileEncoding = "UTF-8")
-        rdrop2::drop_upload(file = here::here('tempData', "plexDB.csv"), 
-                                              path = "R/lastfm")
         
+        reqUpload <- request('https://content.dropboxapi.com/2/files/upload/') %>% 
+            req_oauth_refresh(client = dropboxClient, 
+                              refresh_token = dropboxToken$refresh_token) %>% 
+            req_headers('Content-Type' = 'application/octet-stream') %>% 
+            req_headers(
+                'Dropbox-API-Arg' = str_c('{',
+                                          '"autorename":false,',
+                                          '"mode":"overwrite",',
+                                          '"path":"/R/lastfm/plexDB.csv",',
+                                          '"strict_conflict":false', 
+                                          '}')
+            ) %>% 
+            req_body_file(path = here::here('tempData', 'plexDB.csv'))
         
+        respUpload <- req_perform(reqUpload)
+
     } else {
         
-        plex <- rdrop2::drop_read_csv(file = "R/lastfm/plexDB.csv") %>% 
-            as_tibble()
+        reqDownload <-  request("https://content.dropboxapi.com/2/files/download") %>% 
+            req_oauth_refresh(client = dropboxClient, 
+                              refresh_token = dropboxToken$refresh_token) %>% 
+            req_method('POST') %>%
+            req_headers(
+                'Dropbox-API-Arg' = str_c('{',
+                                          '"path":"/R/lastfm/plexDB.csv"',
+                                          '}')
+            )
+        
+        respDownload <- req_perform(reqDownload,
+                                    here::here('tempData', 'plexDB.csv'))
+        
+        plex <- readr::read_csv(here::here('tempData', 'plexDB.csv'), show_col_types = FALSE)
         
     }
     

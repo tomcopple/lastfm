@@ -14,16 +14,19 @@ getLastfm <- function(refresh = TRUE) {
 # Dropbox Auth ------------------------------------------------------------
     ## If this doesn't work, then
     # source('scripts/dropboxAuth.R')
-    token <- readRDS('token.RDS')
+    dropboxClient <- oauth_client(
+        id = Sys.getenv('DROPBOX_KEY'),
+        secret = Sys.getenv('DROPBOX_SECRET'),
+        token_url = "https://api.dropboxapi.com/oauth2/token",
+        name = 'Rstudio_TC'
+    )
+    dropboxToken <- readRDS('dropbox.RDS')
 
 # Dropbox Download --------------------------------------------------------
 
     reqDownload <- request("https://content.dropboxapi.com/2/files/download") %>% 
-        # req_oauth_auth_code(
-        #     client, port = 43451,
-        #     auth_url = "https://www.dropbox.com/oauth2/authorize?token_access_type=offline"
-        # ) %>% 
-        req_auth_bearer_token(token$access_token) %>%
+        req_oauth_refresh(client = dropboxClient, 
+                          refresh_token = dropboxToken$refresh_token) %>% 
         req_method('POST') %>%
         req_headers(
             'Dropbox-API-Arg' = str_c('{',
@@ -91,7 +94,8 @@ getLastfm <- function(refresh = TRUE) {
         write.csv(localData, file = "tempData/tracks.csv", row.names = FALSE, fileEncoding = "UTF-8")
         
         reqUpload <- request('https://content.dropboxapi.com/2/files/upload/') %>% 
-            req_auth_bearer_token(token$access_token) %>%
+            req_oauth_refresh(client = dropboxClient, 
+                              refresh_token = dropboxToken$refresh_token) %>% 
             req_headers('Content-Type' = 'application/octet-stream') %>% 
             req_headers(
                 'Dropbox-API-Arg' = str_c('{',
