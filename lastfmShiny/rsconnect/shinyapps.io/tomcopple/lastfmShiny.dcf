@@ -5,10 +5,10 @@ account: tomcopple
 server: shinyapps.io
 hostUrl: https://api.shinyapps.io/v1
 appId: 181512
-bundleId: 5020115
+bundleId: 5565554
 url: https://tomcopple.shinyapps.io/lastfmShiny/
-when: 1631288557.36125
-lastSyncTime: 1631288557.36126
+when: 1644512471.08839
+lastSyncTime: 1644512471.0884
 asMultiple: FALSE
 asStatic: FALSE
-ignoredFiles: plexMasterRatings.csv|tracks-old.csv|tracks.csv
+ignoredFiles: tracks-old.csv|tracks.csv

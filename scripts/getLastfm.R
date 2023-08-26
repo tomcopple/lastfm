@@ -20,7 +20,7 @@ getLastfm <- function(refresh = TRUE) {
         token_url = "https://api.dropboxapi.com/oauth2/token",
         name = 'Rstudio_TC'
     )
-    dropboxToken <- readRDS('dropbox.RDS')
+    dropboxToken <- readRDS(here::here('dropbox.RDS'))
 
 # Dropbox Download --------------------------------------------------------
 

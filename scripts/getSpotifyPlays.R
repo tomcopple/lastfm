@@ -6,7 +6,7 @@ source(here::here('scripts', 'getLastfm.R'))
 source(here::here('scripts', 'getSlugs.R'))
 
 ## Get Lastfm history
-lastfm <- getLastfm(T, F) 
+lastfm <- getLastfm(T) 
 
 
 
@@ -107,6 +107,7 @@ trackCount <- tracks %>%
               by = c('artist_join', 'track_join')) %>% 
     mutate(n = replace_na(n, 0)) %>% 
     select(!contains('_join'))
+
 
 trackCount
 
