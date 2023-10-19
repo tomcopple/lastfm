@@ -28,15 +28,27 @@ getPlexRatings <- function(refresh = FALSE, write = FALSE, printTree = FALSE) {
                 geom_treemap_subgroup_border(size = 1) +
                 scale_fill_brewer()
             
-            treeFilename <- here::here('tempData', str_c(
-                str_replace_all(lubridate::now(), pattern = "[:\\s]", "-"), '-treemap.png'))
+            treeFilename <- str_glue("{format(now(), '%Y-%m-%d-%H-%M-%S')}-treemap.png")
+                
             ggsave(plot = treemap,
-                   filename = treeFilename,
+                   filename = here::here('tempData', treeFilename),
                    width = 10.5, height = 9.14, units = "in")
-            rdrop2::drop_upload(file = treeFilename,
-                                path = 'R/lastfm/')
             
-            }
+            reqUpload <- request('https://content.dropboxapi.com/2/files/upload/') %>% 
+                req_oauth_refresh(client = dropboxClient, 
+                                  refresh_token = dropboxToken$refresh_token) %>% 
+                req_headers('Content-Type' = 'application/octet-stream') %>% 
+                req_headers(
+                    'Dropbox-API-Arg' = str_c(
+                        '{"autorename":false,',
+                        '"mode":"overwrite",',
+                        str_glue('"path":"/R/lastfm/{treeFilename}",'),
+                        '"strict_conflict":false}')
+                ) %>% 
+                req_body_file(path = here::here('tempData', treeFilename))
+            
+            respUpload <- req_perform(reqUpload)
+        }
         
     } else {
         plex <- getPlex(F)
@@ -71,9 +83,6 @@ getPlexRatings <- function(refresh = FALSE, write = FALSE, printTree = FALSE) {
         print(ratings)
         .GlobalEnv$albumRatings <- ratings
 
-    
-    
-    
     
     return(plex)
 }
