@@ -5,6 +5,8 @@ getPlexRatings <- function(refresh = FALSE, write = FALSE, printTree = FALSE) {
     source('scripts/getPlex.R')
     token <- "YTbYV3s5vkVVco6stFDW"
     
+    
+    
     ## Music is section 5, need to search '10' to get all tracks
     if(refresh) {
         
@@ -16,6 +18,14 @@ getPlexRatings <- function(refresh = FALSE, write = FALSE, printTree = FALSE) {
         
         
         if(printTree) { 
+            
+            dropboxClient <- oauth_client(
+                id = Sys.getenv('DROPBOX_KEY'),
+                secret = Sys.getenv('DROPBOX_SECRET'),
+                token_url = "https://api.dropboxapi.com/oauth2/token",
+                name = 'Rstudio_TC'
+            )
+            dropboxToken <- readRDS(here::here('dropbox.RDS'))
             print("Producing treemap")
             treemapData <- plex %>% 
                 select(album, rating) %>% 
@@ -87,7 +97,7 @@ getPlexRatings <- function(refresh = FALSE, write = FALSE, printTree = FALSE) {
     return(plex)
 }
 
-# plex <- getPlexRatings(T, T, T)
+plex <- getPlexRatings(T, F, T)
 
 # albumRatings %>% 
 #     filter(x == y)
