@@ -44,8 +44,9 @@ while (keepgoing) {
     print (glue::glue("This may take a while, don't panic... [{i}/{pages}]"))
     
     ## send httr GET request and format response
-    res1 <- httr2::request(url)
-    resp1 <- httr2::req_perform(res1)
+    res1 <- httr2::request(url) %>% 
+        req_retry(max_tries = 3, backoff = ~30)
+    resp1 <- httr2::req_perform(res1) 
     
     tracksRaw <- resp1 %>% 
         httr2::resp_body_string() %>% 
@@ -74,8 +75,10 @@ while (keepgoing) {
     
 }
 
+## Remove duplicates (i.e. same track in same minute)
 restoreFinal <- as_tibble(restore) %>% 
-    filter(date >= stopDate)
+    filter(date >= stopDate) %>% 
+    distinct()
 
 ## Import current lastfm data
 source('scripts/getLastfm.R')
