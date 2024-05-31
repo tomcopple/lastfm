@@ -1,7 +1,6 @@
 # Backup script if you need to restore all scrobbles for some reason
 
-library(tidyverse);library(lubridate);library(httr);library(jsonlite)
-library(rdrop2);library(here)
+library(tidyverse);library(lubridate);library(jsonlite);library(httr2);library(here)
 
 # Get credentials from 
 user <- Sys.getenv('LASTFM_USER')
@@ -15,11 +14,12 @@ baseurl <- paste0(
 
 
 ## Find out how many responses in total
-res1 <- httr::GET(glue::glue("http://ws.audioscrobbler.com/2.0/?method=user.getinfo&user={user}&api_key={api}&format=json"))
-httr::stop_for_status(res1)
-howMany <- res1 %>% httr::content() %>% 
-    pluck('user') %>% 
-    pluck('playcount') %>% 
+res1 <- httr2::request(glue::glue("http://ws.audioscrobbler.com/2.0/?method=user.getinfo&user={user}&api_key={api}&format=json"))
+resp1 <- httr2::req_perform(res1)
+
+howMany <- resp1 %>% 
+    httr2::resp_body_json() %>% 
+    pluck('user', 'playcount') %>% 
     as.numeric()
 
 # Initiate data frame
@@ -44,20 +44,22 @@ while (keepgoing) {
     print (glue::glue("This may take a while, don't panic... [{i}/{pages}]"))
     
     ## send httr GET request and format response
-    res1 <- httr::GET(url)
-    httr::stop_for_status(res1)
-    res2 <- httr::content(res1, as = 'text')    
-    res3 <- fromJSON(res2, simplifyDataFrame = T, flatten = T) %>% 
-        pluck('recenttracks') %>% 
-        pluck('track')
-    res4 <- res3 %>% 
+    res1 <- httr2::request(url)
+    resp1 <- httr2::req_perform(res1)
+    
+    tracksRaw <- resp1 %>% 
+        httr2::resp_body_string() %>% 
+        jsonlite::fromJSON(simplifyDataFrame = T, flatten = T) %>% 
+        pluck('recenttracks', 'track')
+    
+    tracksDF <- tracksRaw %>% 
         select(track = name, artist = `artist.#text`, album = `album.#text`,
                dateRaw = `date.#text`) %>% 
         mutate(date = parse_date_time(dateRaw, "d b Y, H:M"), .keep = 'unused') %>% 
         filter(!is.na(date)) %>% 
         as_tibble()
     
-    restore <- bind_rows(restore, res4) %>% 
+    restore <- bind_rows(restore, tracksDF) %>% 
         arrange(desc(date))
     
     i <- i + 1
@@ -88,12 +90,30 @@ newLastfm <- filter(lastfm, date < min(restoreFinal$date)) %>%
 ## Save and upload a backup copy and the master copy
 write.csv(newLastfm, file = here::here('tempData', str_c(today(), '-restoreLastfm.csv')), 
           row.names = FALSE, fileEncoding = "UTF-8")
-write.csv(newLastfm, file = 'tracks.csv', 
+write.csv(newLastfm, file = here::here('tempData', 'tracks.csv'), 
           row.names = FALSE, fileEncoding = "UTF-8")
 
+## Upload to Dropbox ---- 
+dropboxClient <- oauth_client(
+    id = Sys.getenv('DROPBOX_KEY'),
+    secret = Sys.getenv('DROPBOX_SECRET'),
+    token_url = "https://api.dropboxapi.com/oauth2/token",
+    name = 'Rstudio_TC'
+)
+dropboxToken <- readRDS(here::here('dropbox.RDS'))
 
-rdrop2::drop_upload(file = here::here('tempData', str_c(today(), '-restoreLastfm.csv')),
-                    path = 'R/lastfm')
+reqUpload <- request('https://content.dropboxapi.com/2/files/upload/') %>% 
+    req_oauth_refresh(client = dropboxClient, 
+                      refresh_token = dropboxToken$refresh_token) %>% 
+    req_headers('Content-Type' = 'application/octet-stream') %>% 
+    req_headers(
+        'Dropbox-API-Arg' = str_c('{',
+                                  '"autorename":false,',
+                                  '"mode":"overwrite",',
+                                  '"path":"/R/lastfm/tracks.csv",',
+                                  '"strict_conflict":false', 
+                                  '}')
+    ) %>% 
+    req_body_file(path = here::here('tempData', 'tracks.csv'))
 
-rdrop2::drop_upload(file = 'tracks.csv',
-                    path = 'R/lastfm')
+respUpload <- req_perform(reqUpload)
