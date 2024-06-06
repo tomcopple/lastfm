@@ -3,7 +3,7 @@
 getPlexRatings <- function(refresh = FALSE, write = FALSE, printTree = FALSE) {
     library(tidyverse);library(httr);library(lubridate);library(rdrop2);library(treemapify)
     source('scripts/getPlex.R')
-    token <- "YTbYV3s5vkVVco6stFDW"
+    token <- "o8xPSiPMQtky4cxEtdKW"
     
     
     
@@ -99,5 +99,5 @@ getPlexRatings <- function(refresh = FALSE, write = FALSE, printTree = FALSE) {
 
 plex <- getPlexRatings(T, F, T)
 
-# albumRatings %>% 
-#     filter(x == y)
+albumRatings %>%
+    filter(x == y)

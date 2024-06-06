@@ -13,8 +13,8 @@ getPlex <- function(refresh = FALSE) {
     dropboxToken <- readRDS('dropbox.RDS')
     
     if (refresh) {
-        token <- "YTbYV3s5vkVVco6stFDW"
-        plexRaw <- content(GET("http://192.168.1.99:32400/library/sections/3/search?type=10", 
+        token <- "o8xPSiPMQtky4cxEtdKW"
+        plexRaw <- content(GET("http://192.168.1.202:32400/library/sections/3/search?type=10", 
                                  add_headers("X-Plex-Token" = token)), type = 'text') %>% 
             jsonlite::fromJSON() %>% 
             pluck('MediaContainer') %>% 

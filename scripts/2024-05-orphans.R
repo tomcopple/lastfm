@@ -1,15 +1,35 @@
 ## Orphans and misfits
 library(tidyverse);library(httr2);library(jsonlite)
 source('scripts/getLastfm.R')
-tracks <- getLastfm(T)
+tracks <- getLastfm(F)
 
 playlist <- tracks %>% 
-    filter(year(date) == 2024) %>% 
-    add_count(artist,track) %>% 
+    na.omit() %>% 
+    mutate_if(is.character, str_to_title) %>% 
+    mutate(year = year(date)) %>% 
+    filter(year != 2024) %>% 
+    add_count(artist,track, album, year) %>% 
     add_count(artist, album) %>% 
     # filter(nn < n)
-    filter(n > 5, nn == n) %>% 
+    filter(n > 6, nn <= 1.5*n) %>% 
+    filter(str_detect(album, 'Pitchfork', negate = T),
+           str_detect(album, 'Stones Throw And', negate = T),
+           str_detect(album, 'Dj-Kicks', negate = T),
+           artist != 'Super Simple Songs',
+           artist != 'Pinkfong',
+           artist != 'Dwayne Johnson',
+           artist != 'Roger Miller',
+           artist != 'Raffi',
+           artist != 'Melody Shakers',
+           str_detect(track, 'Five Little Ducks', negate = T),
+           str_detect(track, 'Taking A Bath', negate = T),
+           str_detect(track, 'Bubble Bath In The Sink', negate = T),
+           artist != 'Dora The Explorer',
+           artist != 'Johann Sebastian Bach',
+           str_detect(artist, 'The Very Best Feat', negate = T),
+           str_detect(artist, 'The Very Best & ', negate = T)) %>% 
     distinct(artist,track,album) %>% 
+    select(-album) %>% 
     unite(col = tracks, artist, track, sep = " ") %>%
     pull(tracks)
 
@@ -33,8 +53,8 @@ getSpotAuth <- function (req) {
         scope = str_c('playlist-modify', 'playlist-modify-private',
                       'playlist-read-private', 'playlist-read-collaborative',
                       sep = " "),
-        cache_disk = TRUE,
-        redirect_uri = "http://localhost:1410/"
+        redirect_uri = "http://localhost:1410/",
+        cache_disk = TRUE
     )
 }
 
@@ -52,7 +72,7 @@ getSpotAuth <- function (req) {
 
 
 ## Should be able to just import Spotify token on this computer
-spotToken <- readRDS(here::here('spotifyToken.RDS'))
+# spotToken <- readRDS(here::here('spotifyToken.RDS'))
 
 plReq <- httr2::request(base_url = "https://api.spotify.com/v1/users/tomcopple/playlists") %>% 
     getSpotAuth() %>% 
@@ -82,7 +102,7 @@ for (i in 1:reps) {
     allPlaylists <- bind_rows(allPlaylists, getPlaylists)
 }
 
-orphansID <- filter(allPlaylists, name == 'Orphans 2024') %>% pull(id)
+orphansID <- filter(allPlaylists, name == 'Orphans Other') %>% pull(id)
 
 ## Try to find song IDs
 getIDs <- function(track) {
@@ -107,9 +127,37 @@ getIDs <- function(track) {
 }
 spotIDs <- playlist %>% map_chr(., getIDs) %>% na.omit()
 
-sendPlReq <- httr2::request(base_url = str_glue("https://api.spotify.com/v1/playlists/{orphansID}/tracks")) %>% 
-    req_method('PUT') %>% 
-    req_body_json(list(uris = str_c("spotify:track:", spotIDs))) %>% 
-    getSpotAuth()
-
-sendPlResp <- req_perform(sendPlReq)
+if (length(spotIDs) > 100) {
+    howManyGoes <- length(spotIDs) %/% 100
+    
+    firstGo <- spotIDs[c(1:100)]
+    
+    sendPlReq <- httr2::request(base_url = str_glue("https://api.spotify.com/v1/playlists/{orphansID}/tracks")) %>% 
+        req_method('PUT') %>% 
+        req_body_json(list(uris = str_c("spotify:track:", firstGo))) %>% 
+        getSpotAuth()
+    sendPlResp <- req_perform(sendPlReq)
+    
+    for (i in 1:howManyGoes) {
+        if ( (i + 1) * 100 <= length(spotIDs)) {
+            nextGo <- spotIDs[c( ((i * 100) + 1) : ((i + 1) * 100) )]
+        } else { 
+            nextGo <- spotIDs[c( ((i * 100) + 1) : length(spotIDs) )]
+        }
+        
+        sendPlReq <- httr2::request(base_url = str_glue("https://api.spotify.com/v1/playlists/{orphansID}/tracks")) %>% 
+            req_method('POST') %>% 
+            req_body_json(list(uris = str_c("spotify:track:", nextGo))) %>% 
+            getSpotAuth()
+        sendPlResp <- req_perform(sendPlReq)
+    }
+    
+} else {
+    sendPlReq <- httr2::request(base_url = str_glue("https://api.spotify.com/v1/playlists/{orphansID}/tracks")) %>% 
+        req_method('PUT') %>% 
+        req_body_json(list(uris = str_c("spotify:track:", spotIDs[c(101:192)]))) %>% 
+        getSpotAuth()
+    
+    sendPlResp <- req_perform(sendPlReq)
+    
+} 

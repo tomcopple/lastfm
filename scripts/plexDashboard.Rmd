@@ -19,7 +19,7 @@ getwd()
 # saveRDS(token, 'scripts/dropbox.rds')
 
 token <- readRDS("dropbox.rds")
-token$refresh()
+# token$refresh()
 
 # Functions -----
 getPlex <- function(refresh = FALSE) {
@@ -50,8 +50,8 @@ getPlex <- function(refresh = FALSE) {
     
     write.csv(plex, file = here::here('tempData', 'plexDB.csv'), 
               row.names = FALSE, fileEncoding = "UTF-8")
-    rdrop2::drop_upload(file = here::here('tempData', "plexDB.csv"), 
-                        path = "R/lastfm", dtoken = token)
+    # rdrop2::drop_upload(file = here::here('tempData', "plexDB.csv"), 
+    #                     path = "R/lastfm", dtoken = token)
     
   } else {
     
