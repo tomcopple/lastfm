@@ -8,7 +8,8 @@ runtime: shiny
 ---
 
 ```{r global, include=FALSE}
-library(flexdashboard);library(tidyverse);library(httr);library(jsonlite);library(shiny);library(DT)
+library(flexdashboard);library(tidyverse);
+library(httr);library(jsonlite);library(shiny);library(DT)
 print(getwd())
 if (str_detect(getwd(), 'scripts', negate = F)) {
     source('getLastfm.R');source('getSlugs.R')
@@ -46,8 +47,9 @@ for (i in 1:reps) {
         pluck('items') %>% 
         select_if(names(.) %in% c('name', 'id', 'images')) %>% 
         mutate(images = map_chr(images, function(x) {
-            if(nrow(x) > 0) {
-                x %>% pluck(2) %>% pluck(1)
+            if(!is.null(x$url)) {
+                print(names(x))
+                x %>% pull(url) %>% first()
             } else {
                 ""
             }
