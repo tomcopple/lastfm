@@ -1,6 +1,6 @@
 ## get spotify playcounts from lastfm for specific playlists
 
-library(tidyverse);library(httr);library(jsonlite)
+library(tidyverse);library(httr);library(jsonlite);library(httr2)
 
 source(here::here('scripts', 'getLastfm.R'))
 source(here::here('scripts', 'getSlugs.R'))
@@ -8,40 +8,62 @@ source(here::here('scripts', 'getSlugs.R'))
 ## Get Lastfm history
 lastfm <- getLastfm(T) 
 
-
-
 # Spotify auth ------------------------------------------------------------
-endpoint <- httr::oauth_endpoint(
-    authorize = "https://accounts.spotify.com/authorize",
-    access =    "https://accounts.spotify.com/api/token")
+spotID <- Sys.getenv('SPOTIFY_ID')
+spotSecret <- Sys.getenv('SPOTIFY_SECRET')
+spotAuth <- "https://accounts.spotify.com/authorize"
 
-app <- httr::oauth_app(appname = "last2spot", key = "95bdfb9cb87841208145ede83a2dd878",secret = "2ada4a2188b7420d8833b2fe783e5c03")
+spotClient <- httr2::oauth_client(
+    id = spotID,
+    secret = spotSecret,
+    token_url = "https://accounts.spotify.com/api/token",
+    name = "last2spot"
+)
 
-spotAuth <- httr::oauth2.0_token(endpoint = endpoint, app = app,
-                                 scope = c('playlist-modify', 'playlist-modify-private',
-                                           'playlist-read-private', 'playlist-read-collaborative'))
-
-
-
+getSpotAuth <- function (req) {
+    req_oauth_auth_code(
+        req,
+        client = spotClient,
+        auth_url = spotAuth, 
+        scope = str_c('playlist-modify', 'playlist-modify-private',
+                      'playlist-read-private', 'playlist-read-collaborative',
+                      sep = " "),
+        cache_disk = TRUE,
+        redirect_uri = "http://localhost:1410/"
+    )
+}
 # Get list of playlists ---------------------------------------------------
-
-howManyPlaylists <- httr::GET(url = "https://api.spotify.com/v1/users/tomcopple/playlists",
-                              httr::config(token = spotAuth), encode = 'json') %>% 
-    content(., as = 'text') %>% fromJSON() %>% pluck('total')
+plReq <- httr2::request(base_url = "https://api.spotify.com/v1/users/tomcopple/playlists") %>% 
+    getSpotAuth() %>% 
+    req_perform()
+plResp <- plReq %>% resp_body_json()
+howManyPlaylists <- plResp %>% pluck('total')
 
 allPlaylists <- data.frame()
-reps <- howManyPlaylists %/% 50 + 1
+reps <- (howManyPlaylists - 1) %/% 50 + 1
 
 for (i in 1:reps) {
-    getPlaylists <- httr::GET(url = "https://api.spotify.com/v1/users/tomcopple/playlists",
-                              httr::config(token = spotAuth), encode = 'json',
-                              query = list(limit = 50, offset = 50 * (i - 1))) %>% 
-        content(., as = 'text') %>% fromJSON() %>% 
+    getPlReq <- httr2::request(base_url = "https://api.spotify.com/v1/users/tomcopple/playlists") %>% 
+        getSpotAuth() %>% 
+        req_url_query(limit = 50, offset = 50 * (i - 1))
+    getPlResp <- getPlReq %>% 
+        req_perform() %>% 
+        resp_body_string() %>% 
+        jsonlite::fromJSON()
+    getPlaylists <- getPlResp %>% 
         pluck('items') %>% 
-        select(name, id)
-    allPlaylists <- bind_rows(allPlaylists, getPlaylists)
+        select_if(names(.) %in% c('name', 'id', 'images')) %>% 
+        mutate(images = map_chr(images, function(x) {
+            if(!is.null(x$url)) {
+                # print(names(x))
+                x %>% pull(url) %>% first()
+            } else {
+                ""
+            }
+        }))
+    allPlaylists <- bind_rows(allPlaylists, getPlaylists) %>% 
+        arrange(name)
 }
-
 
 # Download Spotify Tracks -------------------------------------------------
 
@@ -55,25 +77,33 @@ if (playlist %in% allPlaylists$name) {
 }
 
 ## Can only get 100 tracks at a time, so need to know how many times to run it
-totalTracks <- httr::GET(url = str_c('https://api.spotify.com/v1/playlists/', playlistID, '/tracks'),
-                         query = list(fields = "total"),
-                         httr::config(token = spotAuth), encode = 'json') %>% 
-    content(., as = 'text') %>% fromJSON() %>% pluck('total')
+totalReq <- httr2::request(base_url = str_glue("https://api.spotify.com/v1/playlists/{playlistID}/tracks")) %>% 
+    getSpotAuth() %>% 
+    req_url_query(fields = 'total')
+totalResp <- httr2::req_perform(totalReq) %>% 
+    resp_body_string() %>% 
+    jsonlite::fromJSON()
+totalTracks <- totalResp %>% pluck('total')
 
 offsets <- seq.int(from = 0, to = floor((totalTracks-1)/100))
 
 ## Define function to get tracks
 ## x is offset, i.e. starts at 1 and goes up (defined by i)
 getTracks <- function(x) {
-    tracksRaw <- httr::GET(url = str_c('https://api.spotify.com/v1/playlists/', playlistID, '/tracks'),
-                           query = list(
-                               fields = "items(track(artists.name,album(name),track_number,name, id))",
-                               limit = 100, offset = x*100),
-                           httr::config(token = spotAuth), encode = 'json'
-    )
-    tracksReturn <- content(tracksRaw, as = 'text') %>% fromJSON() %>% pluck('items') %>% pluck('track') %>% as_tibble() %>% 
-        mutate(album = purrr::flatten_chr(album)) %>% 
-        mutate(artist = purrr::map_chr(artists, function(x) first(unlist(x))), .keep = 'unused') %>% 
+    tracksReq <- httr2::request(base_url = str_glue("https://api.spotify.com/v1/playlists/{playlistID}/tracks")) %>% 
+        getSpotAuth() %>% 
+        req_url_query(fields = "items(track(artists.name,album(name),track_number,name, id))",
+                      limit = 100, offset = x*100)
+    tracksResp <- tracksReq %>% 
+        req_perform() %>% 
+        resp_body_string() %>% 
+        jsonlite::fromJSON()
+    
+    tracksReturn <- tracksResp %>% 
+        pluck('items','track') %>%
+        as_tibble() %>% 
+        mutate(album = purrr::flatten_chr(album),
+               artist = purrr::map_chr(artists, ~first(unlist(.))), .keep = 'unused') %>% 
         rename(track = name)
     return(tracksReturn)
 }
@@ -164,18 +194,21 @@ top10 <- trackCount %>%
 top10    
 
 ## Then try to send them all to the playlist
-httr::PUT(url = str_c('https://api.spotify.com/v1/playlists/', "1BBr03knQFBNoj3EUN2rpm", '/tracks'),
-              body = list(uris = str_c('spotify:track:', 
-                                       minPlays$id
-                                       # top10$id
-                                       )),
-              httr::config(token = spotAuth), encode = 'json'
-    )
+minReq <- httr2::request(base_url = str_c('https://api.spotify.com/v1/playlists/', "1BBr03knQFBNoj3EUN2rpm", '/tracks')) %>% 
+    getSpotAuth() %>% 
+    req_body_json(list(
+        uris = str_glue("spotify:track:{minPlays$id}")
+    )) %>% 
+    req_method('PUT')
+minResp <- req_perform(minReq)
 
-httr::PUT(url = str_c('https://api.spotify.com/v1/playlists/', "1Th3m2O6NYvmx1rn5ymsYu", '/tracks'),
-          body = list(uris = str_c('spotify:track:', 
-                                   top10$id
-          )),
-          httr::config(token = spotAuth), encode = 'json'
-)
+topReq <- httr2::request(base_url = str_c('https://api.spotify.com/v1/playlists/', "1Th3m2O6NYvmx1rn5ymsYu", '/tracks')) %>% 
+    getSpotAuth() %>% 
+    req_body_json(list(
+        uris = str_glue("spotify:track:{top10$id}")
+    )) %>% 
+    req_method('PUT')
+topResp <- req_perform(topReq)
+
+
 
