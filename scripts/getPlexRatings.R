@@ -1,7 +1,7 @@
 ## Query Plex API?
 
 getPlexRatings <- function(refresh = FALSE, write = FALSE, printTree = FALSE) {
-    library(tidyverse);library(httr);library(lubridate);library(rdrop2);library(treemapify)
+    library(tidyverse);library(httr);library(lubridate);library(treemapify)
     source('scripts/getPlex.R')
     token <- "o8xPSiPMQtky4cxEtdKW"
     
@@ -72,9 +72,23 @@ getPlexRatings <- function(refresh = FALSE, write = FALSE, printTree = FALSE) {
     if(write) {
         print("Saving backup copy of data")
         write_csv(ratedDF, here::here('tempData', 'plexMasterRatings.csv'))
-        rdrop2::drop_upload(file = here::here('tempData', 'plexMasterRatings.csv'), 
-                            path = 'R/lastfm/')
         
+        request('https://content.dropboxapi.com/2/files/upload/') %>% 
+            req_oauth_refresh(client = dropboxClient, 
+                              refresh_token = dropboxToken$refresh_token) %>% 
+            req_headers('Content-Type' = 'application/octet-stream') %>% 
+            req_headers(
+                'Dropbox-API-Arg' = str_c('{',
+                                          '"autorename":false,',
+                                          '"mode":"overwrite",',
+                                          '"path":"/R/lastfm/plexMasterRatings.csv",',
+                                          '"strict_conflict":false', 
+                                          '}')
+            ) %>% 
+            req_body_file(path = here::here('tempData', 'plexMasterRatings.csv'))
+        
+        respUpload <- req_perform(reqUpload)
+
     }
         
     ratings <- plex %>% 
