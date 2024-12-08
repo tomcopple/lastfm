@@ -111,7 +111,7 @@ observeEvent(eventExpr = input$refreshLastfm,
              })
 ```
 
-Column {data-width=650}
+Column {data-width=600}
 -----------------------------------------------------------------------
 
 ### Table of Plays
@@ -121,7 +121,9 @@ DT::renderDataTable({
     playlistID <- input$choosePlaylist
 
 ## Can only get 100 tracks at a time, so need to know how many times to run it
-totalTracksReq <- httr2::request(base_url = str_glue('https://api.spotify.com/v1/playlists/{playlistID}/tracks')) %>% 
+totalTracksReq <- httr2::request(base_url = str_glue(
+    'https://api.spotify.com/v1/playlists/{playlistID}/tracks'
+    )) %>% 
     getSpotAuth()
 totalTracksResp <- httr2::req_perform(totalTracksReq) %>% 
     resp_body_json()
@@ -132,7 +134,9 @@ offsets <- seq.int(from = 0, to = floor(totalTracks/100))
 ## Define function to get tracks
 ## x is offset, i.e. starts at 1 and goes up (defined by i)
 getTracks <- function(x) {
-    tracksReq <- httr2::request(base_url = str_glue('https://api.spotify.com/v1/playlists/{playlistID}/tracks')) %>% 
+    tracksReq <- httr2::request(
+        base_url = str_glue('https://api.spotify.com/v1/playlists/{playlistID}/tracks'
+                            )) %>% 
         getSpotAuth() %>% 
         req_url_query(
             fields = "items(track(artists.name,album(name),track_number,name))",
@@ -166,7 +170,7 @@ trackCount <- tracks %>%
               by = c('artist_join', 'track_join')) %>% 
     select(!contains('_join')) %>% 
   mutate(n = replace_na(n, 0)) %>% 
-    select(track_number, artist, track, album, n)
+    select(artist, track, album, n)
 
 DT::datatable(trackCount, options = list(
     pageLength = 25
@@ -175,7 +179,7 @@ DT::datatable(trackCount, options = list(
 
 ```
 
-Column {data-width=150}
+Column {data-width=200}
 -----------------------------------------------------------------------
 
 ### 
