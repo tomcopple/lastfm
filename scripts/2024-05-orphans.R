@@ -84,6 +84,7 @@ aResp <- aReq %>% resp_body_string() %>% jsonlite::fromJSON() %>%
     pluck('items', 'track') %>% 
     select(track = name, artists) %>% 
     unnest(cols = c(artists)) %>% 
+    group_by(track) %>% filter(row_number() == 1) %>% 
     select(track, artist = name) %>% 
     unite(col = tracks, artist, track, sep = " ") %>% 
     mutate(tracks = janitor::make_clean_names(tracks))
