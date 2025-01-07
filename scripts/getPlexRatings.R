@@ -73,7 +73,7 @@ getPlexRatings <- function(refresh = FALSE, write = FALSE, printTree = FALSE) {
         print("Saving backup copy of data")
         write_csv(ratedDF, here::here('tempData', 'plexMasterRatings.csv'))
         
-        request('https://content.dropboxapi.com/2/files/upload/') %>% 
+        reqUpload <- request('https://content.dropboxapi.com/2/files/upload/') %>% 
             req_oauth_refresh(client = dropboxClient, 
                               refresh_token = dropboxToken$refresh_token) %>% 
             req_headers('Content-Type' = 'application/octet-stream') %>% 
