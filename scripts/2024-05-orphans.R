@@ -1,17 +1,19 @@
 ## Orphans and misfits
 library(tidyverse);library(httr2);library(jsonlite)
 source('scripts/getLastfm.R')
-tracks <- getLastfm(F)
+tracks <- getLastfm(T)
+
+selectYear <- 2015
 
 playlist <- tracks %>% 
     na.omit() %>% 
     mutate_if(is.character, str_to_title) %>% 
     mutate(year = year(date)) %>% 
-    filter(year != 2024) %>% 
+    filter(year == selectYear) %>% 
     add_count(artist,track, album, year) %>% 
     add_count(artist, album) %>% 
     # filter(nn < n)
-    filter(n > 6, nn <= 1.5*n) %>% 
+    filter(n > 5, n >= nn * 0.5) %>% 
     filter(str_detect(album, 'Pitchfork', negate = T),
            str_detect(album, 'Stones Throw And', negate = T),
            str_detect(album, 'Dj-Kicks', negate = T),
@@ -27,8 +29,10 @@ playlist <- tracks %>%
            artist != 'Dora The Explorer',
            artist != 'Johann Sebastian Bach',
            str_detect(artist, 'The Very Best Feat', negate = T),
-           str_detect(artist, 'The Very Best & ', negate = T)) %>% 
-    distinct(artist,track,album) %>% 
+           str_detect(artist, 'The Very Best & ', negate = T),
+           artist != 'Bluey') %>% 
+    distinct(artist,track,album,n,nn) %>% 
+    arrange(desc(n)) %>% 
     select(-album) %>% 
     unite(col = tracks, artist, track, sep = " ") %>%
     pull(tracks)
@@ -102,7 +106,7 @@ for (i in 1:reps) {
     allPlaylists <- bind_rows(allPlaylists, getPlaylists)
 }
 
-orphansID <- filter(allPlaylists, name == 'Orphans Other') %>% pull(id)
+orphansID <- filter(allPlaylists, name == 'Orphans 2024') %>% pull(id)
 
 ## Try to find song IDs
 getIDs <- function(track) {
@@ -155,7 +159,7 @@ if (length(spotIDs) > 100) {
 } else {
     sendPlReq <- httr2::request(base_url = str_glue("https://api.spotify.com/v1/playlists/{orphansID}/tracks")) %>% 
         req_method('PUT') %>% 
-        req_body_json(list(uris = str_c("spotify:track:", spotIDs[c(101:192)]))) %>% 
+        req_body_json(list(uris = str_c("spotify:track:", spotIDs))) %>% 
         getSpotAuth()
     
     sendPlResp <- req_perform(sendPlReq)
