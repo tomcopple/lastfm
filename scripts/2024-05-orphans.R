@@ -37,6 +37,9 @@ playlist <- tracks %>%
     unite(col = tracks, artist, track, sep = " ") %>%
     pull(tracks)
 
+
+## Get Spotify playlists first, don't want to use songs already in the A-sides
+## playlist
 # Spotify auth ------------------------------------------------------------
 spotID <- Sys.getenv('SPOTIFY_ID')
 spotSecret <- Sys.getenv('SPOTIFY_SECRET')
@@ -68,8 +71,8 @@ getSpotAuth <- function (req) {
 #     auth_url = spotAuth, 
 #     redirect_uri = "http://localhost:1410/", 
 #    scope = str_c('playlist-modify', 'playlist-modify-private',
- #                 'playlist-read-private', 'playlist-read-collaborative',
-  #                sep = " ")
+#                 'playlist-read-private', 'playlist-read-collaborative',
+#                sep = " ")
 # )
 
 # saveRDS(spotToken, "spotifyToken.RDS")
@@ -78,12 +81,9 @@ getSpotAuth <- function (req) {
 ## Should be able to just import Spotify token on this computer
 # spotToken <- readRDS(here::here('spotifyToken.RDS'))
 
+# Get list of Spotify playlists ----
 plReq <- httr2::request(base_url = "https://api.spotify.com/v1/users/tomcopple/playlists") %>% 
     getSpotAuth() %>% 
-    # httr2::req_oauth_refresh(
-        # client = spotClient,
-        # refresh_token = spotToken$refresh_token
-    # ) %>% 
     req_perform()
 
 plResp <- plReq %>% resp_body_json()
@@ -102,13 +102,104 @@ for (i in 1:reps) {
         jsonlite::fromJSON()
     
     getPlaylists <- getPlResp %>% pluck('items') %>% select(name,id)
-       
+    
     allPlaylists <- bind_rows(allPlaylists, getPlaylists)
 }
 
 orphansID <- filter(allPlaylists, name == 'Orphans 2024') %>% pull(id)
+orphansOther <- filter(allPlaylists, name == 'Orphans Other') %>% pull(id)
+orphans24 <- filter(allPlaylists, name == 'Orphans 2024') %>% pull(id)
+asides <- filter(allPlaylists, name == 'A sides') %>% pull(id)
 
-## Try to find song IDs
+# Download A sides playlist tracks ----
+aReq <- httr2::request(
+    base_url = str_glue("https://api.spotify.com/v1/playlists/{asides}/tracks")) %>% 
+    getSpotAuth() %>% 
+    req_perform()
+aResp <- aReq %>% resp_body_string() %>% jsonlite::fromJSON() %>% 
+    pluck('items', 'track') %>% 
+    select(track = name, artists) %>% 
+    unnest(cols = c(artists)) %>% 
+    group_by(track) %>% filter(row_number() == 1) %>% 
+    select(track, artist = name) %>% 
+    unite(col = tracks, artist, track, sep = " ") %>% 
+    mutate(tracks = janitor::make_clean_names(tracks))
+
+# Create a master list of tracks to avoid ----
+avoidTracks <- tracks %>% 
+    distinct(artist, album, track) %>% 
+    mutate_if(is.character, str_to_title) %>%
+    na.omit() %>% 
+    rowwise() %>% 
+    filter(any(
+        str_detect(album, 'Pitchfork'),
+        str_detect(artist, 'Beethoven'),
+        str_detect(album, 'Stones Throw And'),
+        str_detect(album, 'Erased Tapes'),
+        str_detect(album, 'Dj-Kicks'),
+        artist == 'Super Simple Songs',
+        artist == 'Pinkfong',
+        artist == 'Dwayne Johnson',
+        artist == 'Roger Miller',
+        artist == 'Raffi',
+        artist == 'Melody Shakers',
+        str_detect(artist, 'Kiboomers'),
+        str_detect(track, 'Five Little Ducks'),
+        str_detect(track, 'Taking A Bath'),
+        str_detect(track, 'Bubble Bath In The Sink'),
+        artist == 'Dora The Explorer',
+        artist == 'Johann Sebastian Bach',
+        str_detect(artist, 'The Very Best Feat'),
+        str_detect(artist, 'The Very Best & ')
+    )) %>% 
+    unite(col = tracks, artist, track, sep = " ", remove = F) %>%
+    mutate(tracks = janitor::make_clean_names(tracks))
+
+# Get playlist of Orphans ----
+## Current year 2024 ----
+playlist24 <- tracks %>% 
+    # select(artist, track, date) %>% 
+    na.omit() %>% 
+    mutate_if(is.character, str_to_title) %>%
+    mutate(year = year(date)) %>% 
+    filter(year == 2024) %>% 
+    add_count(artist,track, album, year) %>% 
+    add_count(artist, album) %>% 
+    # filter(nn < n)
+    ## Get tracks played more than 6 times, and more than the rest of the 
+    ## album put together
+    filter(n > 6, n >= 0.5*nn) %>% 
+    distinct(artist,track,album) %>% 
+    select(-album) %>% 
+    unite(col = tracks, artist, track, sep = " ") %>%
+    mutate(tracksCheck = janitor::make_clean_names(tracks)) %>% 
+    filter(!tracksCheck %in% avoidTracks$tracks,
+           !tracksCheck %in% aResp$tracks) %>% 
+    pull(tracks)
+
+
+## Get all previous Orphans ----
+playlistOther <- tracks %>% 
+    # select(artist, track, date) %>% 
+    na.omit() %>% 
+    mutate_if(is.character, str_to_title) %>%
+    mutate(year = year(date)) %>% 
+    filter(year != 2024) %>% 
+    add_count(artist,track, album, year) %>% 
+    add_count(artist, album) %>% 
+    # filter(nn < n)
+    ## Get tracks played more than 6 times, and more than the rest of the 
+    ## album put together
+    filter(n > 6, n >= 0.5*nn) %>% 
+    distinct(artist,track,album) %>% 
+    select(-album) %>% 
+    unite(col = tracks, artist, track, sep = " ") %>%
+    mutate(tracksCheck = janitor::make_clean_names(tracks)) %>% 
+    filter(!tracksCheck %in% avoidTracks$tracks,
+           !tracksCheck %in% aResp$tracks) %>% 
+    pull(tracks)
+
+# Download song IDs from Spotify ----
 getIDs <- function(track) {
     
     req <- httr2::request(base_url = "https://api.spotify.com/v1/search") %>% 
@@ -129,33 +220,57 @@ getIDs <- function(track) {
     }
     return(id)
 }
-spotIDs <- playlist %>% map_chr(., getIDs) %>% na.omit()
 
-if (length(spotIDs) > 100) {
-    howManyGoes <- length(spotIDs) %/% 100
+spotIDs24 <- playlist24 %>% map_chr(., getIDs) %>% na.omit()
+spotIDsOther <- playlistOther %>% map_chr(., getIDs) %>% na.omit()
+
+# Add to Spotify ----
+addToSpot <- function(playlist) {
+    print(rlang::as_name(enquo(playlist)))
+    plName <- rlang::as_name(enquo(playlist))
+    ext <- str_sub(plName, 8)
+    print(ext)
+    plId <- get(str_glue("orphans{ext}"))
+    print(plId)
     
-    firstGo <- spotIDs[c(1:100)]
-    
-    sendPlReq <- httr2::request(base_url = str_glue("https://api.spotify.com/v1/playlists/{orphansID}/tracks")) %>% 
-        req_method('PUT') %>% 
-        req_body_json(list(uris = str_c("spotify:track:", firstGo))) %>% 
-        getSpotAuth()
-    sendPlResp <- req_perform(sendPlReq)
-    
-    for (i in 1:howManyGoes) {
-        if ( (i + 1) * 100 <= length(spotIDs)) {
-            nextGo <- spotIDs[c( ((i * 100) + 1) : ((i + 1) * 100) )]
-        } else { 
-            nextGo <- spotIDs[c( ((i * 100) + 1) : length(spotIDs) )]
-        }
+    if (length(playlist) > 100) {
+        howManyGoes <- length(playlist) %/% 100
         
-        sendPlReq <- httr2::request(base_url = str_glue("https://api.spotify.com/v1/playlists/{orphansID}/tracks")) %>% 
-            req_method('POST') %>% 
-            req_body_json(list(uris = str_c("spotify:track:", nextGo))) %>% 
+        firstGo <- playlist[c(1:100)]
+        
+        sendPlReq <- httr2::request(
+            base_url = str_glue("https://api.spotify.com/v1/playlists/{plId}/tracks")) %>%
+            req_method('PUT') %>%
+            req_body_json(list(uris = str_c("spotify:track:", firstGo))) %>%
             getSpotAuth()
         sendPlResp <- req_perform(sendPlReq)
+        
+        for (i in 1:howManyGoes) {
+            if ( (i + 1) * 100 <= length(playlist)) {
+                nextGo <- playlist[c( ((i * 100) + 1) : ((i + 1) * 100) )]
+            } else {
+                nextGo <- playlist[c( ((i * 100) + 1) : length(playlist) )]
+            }
+            
+            sendPlReq <- httr2::request(
+                base_url = str_glue("https://api.spotify.com/v1/playlists/{plId}/tracks")) %>%
+                req_method('POST') %>%
+                req_body_json(list(uris = str_c("spotify:track:", nextGo))) %>%
+                getSpotAuth()
+            sendPlResp <- req_perform(sendPlReq)
+        }
+        
+    } 
+    else {
+        sendPlReq <- httr2::request(base_url = str_glue("https://api.spotify.com/v1/playlists/{plId}/tracks")) %>%
+            req_method('PUT') %>%
+            req_body_json(list(uris = str_c("spotify:track:", playlist))) %>%
+            getSpotAuth()
+        
+        sendPlResp <- req_perform(sendPlReq)
+        
     }
-    
+
 } else {
     sendPlReq <- httr2::request(base_url = str_glue("https://api.spotify.com/v1/playlists/{orphansID}/tracks")) %>% 
         req_method('PUT') %>% 
@@ -165,3 +280,9 @@ if (length(spotIDs) > 100) {
     sendPlResp <- req_perform(sendPlReq)
     
 } 
+
+
+addToSpot(spotIDs24)
+addToSpot(spotIDsOther)    
+
+
