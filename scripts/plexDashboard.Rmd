@@ -10,16 +10,22 @@ runtime: shiny
 
 ```{r global, include = FALSE, cache = TRUE}
 # Load data in global chunk so it's accessible
-library(flexdashboard);library(tidyverse);library(httr)
+library(flexdashboard);library(tidyverse);library(httr);library(httr2)
 library(lubridate);library(treemapify);library(plotly)
 library(jsonlite);library(DT);library(treemapify)
 
-getwd()
+getwd() %>% print()
+
 # token <- drop_auth(new_user = T)
 # saveRDS(token, 'scripts/dropbox.rds')
 
-token <- readRDS("dropbox.rds")
-# token$refresh()
+dropboxClient <- oauth_client(
+        id = Sys.getenv('DROPBOX_KEY'),
+        secret = Sys.getenv('DROPBOX_SECRET'),
+        token_url = "https://api.dropboxapi.com/oauth2/token",
+        name = 'Rstudio_TC'
+    )
+dropboxToken <- readRDS(here::here('dropbox.RDS'))
 
 # Functions -----
 getPlex <- function(refresh = FALSE) {
@@ -54,14 +60,22 @@ getPlex <- function(refresh = FALSE) {
     #                     path = "R/lastfm", dtoken = token)
     
   } else {
-    
-      rdrop2::drop_download("R/lastfm/plexDB.csv",
-                          local_path = "plexDB.csv", dtoken = token,
-                          overwrite = T)
-
-    plex <- readr::read_csv("plexDB.csv", lazy = F) %>%
-       as_tibble()
-    
+      reqDownload <-
+          request("https://content.dropboxapi.com/2/files/download") %>%
+          req_oauth_refresh(client = dropboxClient,
+                            refresh_token = dropboxToken$refresh_token) %>%
+          req_method('POST') %>%
+          req_headers('Dropbox-API-Arg' = str_c('{',
+                                                '"path":"/R/lastfm/plexDB.csv"',
+                                                '}'))
+      
+      respDownload <- req_perform(reqDownload,
+                                  here::here('tempData', 'plexDB.csv'))
+      
+      plex <-
+          readr::read_csv(here::here('tempData', 'plexDB.csv'), show_col_types = FALSE)
+      
+      
   }
   
   return(plex)
@@ -69,16 +83,24 @@ getPlex <- function(refresh = FALSE) {
 }
 
 getLastfm <- function(refresh = TRUE) {
-    library(tidyverse);library(rdrop2);library(here)
+    library(tidyverse);library(here)
     
-    rdrop2::drop_download("R/lastfm/tracks.csv",
-                          local_path = "tracks.csv", dtoken = token,
-                          overwrite = T)
+    reqDownload <-
+          request("https://content.dropboxapi.com/2/files/download") %>%
+          req_oauth_refresh(client = dropboxClient,
+                            refresh_token = dropboxToken$refresh_token) %>%
+          req_method('POST') %>%
+          req_headers('Dropbox-API-Arg' = str_c('{',
+                                                '"path":"/R/lastfm/tracks.csv"',
+                                                '}'))
+      
+      respDownload <- req_perform(reqDownload,
+                                  here::here('tempData', 'tracks.csv'))
+      
+      localData <-
+          readr::read_csv(here::here('tempData', 'tracks.csv'), show_col_types = FALSE) %>% 
+          filter(!is.na(date))
 
-    localData <- readr::read_csv("tracks.csv", lazy = F) %>%
-        mutate(date = lubridate::ymd_hms(date)) %>%
-        filter(!is.na(date)) %>%
-        as_tibble()
     
     if (refresh) {
         maxDate = max(localData$date)
@@ -121,8 +143,24 @@ getLastfm <- function(refresh = TRUE) {
                                localData)
         
         ## Write a local csv (ignored in git) and upload to Dropbox. 
-        write.csv(localData, file = "tracks.csv", row.names = FALSE, fileEncoding = "UTF-8")
-        rdrop2::drop_upload(file = "tracks.csv", path = "R/lastfm", dtoken = token)
+        write.csv(localData, file = here::here('tempData', 'tracks.csv'), 
+                  row.names = FALSE, fileEncoding = "UTF-8")
+        
+        reqUpload <- request('https://content.dropboxapi.com/2/files/upload/') %>% 
+            req_oauth_refresh(client = dropboxClient, 
+                              refresh_token = dropboxToken$refresh_token) %>% 
+            req_headers('Content-Type' = 'application/octet-stream') %>% 
+            req_headers(
+                'Dropbox-API-Arg' = str_c('{',
+                                          '"autorename":false,',
+                                          '"mode":"overwrite",',
+                                          '"path":"/R/lastfm/tracks.csv",',
+                                          '"strict_conflict":false', 
+                                          '}')
+            ) %>% 
+            req_body_file(path = here::here('tempData', 'tracks.csv'))
+        
+        respUpload <- req_perform(reqUpload)
     }
     
     return(localData)
@@ -143,8 +181,6 @@ getSlugs <- function(text) {
     return(text1)
     
 }
-
-
 
 removeEve <- function(lastfm) {
   lastfm <- lastfm %>% 

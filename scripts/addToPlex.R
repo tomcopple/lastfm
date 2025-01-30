@@ -1,18 +1,18 @@
 ## Try making Plex playlist
 
-library(tidyverse);library(httr);library(lubridate);library(rdrop2)
+library(tidyverse);library(httr);library(lubridate)
 
 source('scripts/getPlex.R')
 source('scripts/getLastfm.R')
 
-token <- 'YTbYV3s5vkVVco6stFDW'
+token <- 'o8xPSiPMQtky4cxEtdKW'
 
-identity <- content(httr::GET(url = "http://192.168.1.99:32400/identity")) %>% 
+identity <- content(httr::GET(url = "http://192.168.1.202:32400/identity")) %>% 
     magrittr::extract2('MediaContainer') %>% 
     magrittr::extract2('machineIdentifier')
 
-slug <- "http://192.168.1.99:32400/playlists/25891/items"
-slug2 <- "http://192.168.1.99:32400/playlists/28969/items"
+slug <- "http://192.168.1.202:32400/playlists/25891/items"
+slug2 <- "http://192.168.1.202:32400/playlists/28969/items"
 
 ## Get track rating
 # queryString <- str_c("server://", identity, "/com.plexapp.plugins.library/library/metadata/", trackKey)
