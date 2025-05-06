@@ -15,7 +15,7 @@ new23 <- tracks %>%
     group_by(track) %>%
     top_n(n = -1, wt = year) %>%
     group_by(artist, album) %>% add_count(year, name = 'newTracks') %>%
-    filter(year == 2023, newTracks > 5) %>% 
+    filter(year == 2025, newTracks > 5) %>% 
     group_by(artist, album, newTracks) %>% 
     tally(trackPlays, name = 'albumPlays') %>% 
     ungroup() %>% 
