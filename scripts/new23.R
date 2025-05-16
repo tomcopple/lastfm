@@ -5,6 +5,7 @@ source('scripts/getLastfm.R')
 
 tracks <- getLastfm(T)
 
+<<<<<<< HEAD
 getNew <- function(enterYear = year(today())) {
     
     newTracks <- tracks %>% 
@@ -23,5 +24,7 @@ getNew <- function(enterYear = year(today())) {
     
     return(newTracks)
 }
+
+>>>>>>> c729362c645f0bf71b22289b6a5b6bb896f29a37
 
 getNew() %>% View()
