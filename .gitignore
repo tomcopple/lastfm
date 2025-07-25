@@ -16,4 +16,4 @@ tempData/
 */*_cache/*
 lastfm.Rproj
 *.httr-oauth
-
+*.Rproj
