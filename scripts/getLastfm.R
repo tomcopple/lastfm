@@ -91,7 +91,9 @@ getLastfm <- function(refresh = TRUE) {
                                localData)
         
         ## Write a local csv (ignored in git) and upload to Dropbox. 
-        write.csv(localData, file = "tempData/tracks.csv", row.names = FALSE, fileEncoding = "UTF-8")
+        readr::write_excel_csv(x = localData,
+                               file = "tempData/tracks.csv")
+        # write.csv(localData, file = "tempData/tracks.csv", row.names = FALSE, fileEncoding = "UTF-16LE")
         
         reqUpload <- request('https://content.dropboxapi.com/2/files/upload/') %>% 
             req_oauth_refresh(client = dropboxClient, 
