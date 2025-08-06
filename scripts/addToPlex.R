@@ -25,7 +25,7 @@ slug2 <- "http://192.168.1.202:32400/playlists/28969/items"
 #         )
 # )
 # 
-lastfm <- getLastfm(F)
+lastfm <- getLastfm(T)
 plex <- getPlex(refresh = TRUE)
 
 

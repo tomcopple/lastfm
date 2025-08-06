@@ -28,15 +28,17 @@ getPlexRatings <- function(refresh = FALSE, write = FALSE, printTree = FALSE) {
             dropboxToken <- readRDS(here::here('dropbox.RDS'))
             print("Producing treemap")
             treemapData <- plex %>% 
-                select(album, rating) %>% 
+                select(track, album, rating) %>% 
                 mutate(rating = replace_na(rating, 0),
-                       rating = round(rating / 2) * 2,
+                       album = replace_na(album, "Unknown"),
+                       track = replace_na(track, "Unknown"),
+                       rating = round(rating / 2),
                        n = 1) %>% 
                 mutate(rating = forcats::as_factor(rating))  
             treemap <- ggplot(treemapData, aes(area = n, fill = rating, subgroup = album)) +
                 geom_treemap() +
                 geom_treemap_subgroup_border(size = 1) +
-                scale_fill_brewer()
+                scale_fill_brewer(palette = 'Blues')
             
             treeFilename <- str_glue("{format(now(), '%Y-%m-%d-%H-%M-%S')}-treemap.png")
                 
@@ -111,7 +113,7 @@ getPlexRatings <- function(refresh = FALSE, write = FALSE, printTree = FALSE) {
     return(plex)
 }
 
-plex <- getPlexRatings(T, F, T)
+plex <- getPlexRatings(T, T, T)
 
 albumRatings %>%
     filter(x == y)
