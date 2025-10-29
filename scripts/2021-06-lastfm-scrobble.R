@@ -68,3 +68,67 @@ res <- content(scrobblesURL)
 res2 <- as_list(res)
 res3 <- res2$lfm$scrobbles$scrobble
 res3
+
+# 3. Try as function ----
+
+## Scrobble from Plex?
+source(here::here('scripts', 'getPlex.R'))
+plex <- getPlex(F)
+
+findArtist <- "Four Tet"
+findAlbumName <- "Morning"
+
+
+findTracks <- plex %>% 
+        filter(str_detect(albumArtist, findArtist),
+               str_detect(album, findAlbumName)) %>%
+        arrange(trackNum) %>% 
+        distinct(albumArtist, artist, album, track, duration)
+    
+findTracks
+
+scrobbleAlbum <- function(scrobbles = findTracks, timeStart) {
+    
+    timeUnix <- as.numeric(lubridate::ymd_hm(timeStart))
+    
+    scrobbles <- mutate(scrobbles, 
+                        totalDuration = cumsum(duration),
+                        timestamp = timeUnix + totalDuration/1000) %>% 
+        select(albumArtist, artist, album, track, timestamp)
+    
+    pmap(scrobbles, function(artist, albumArtist, album, track, timestamp) {
+        scrobbleTrack <- list(
+            album = album,
+            api_key = api,
+            artist = artist,
+            method = 'track.scrobble',
+            sk = finalKey,
+            timestamp = timestamp,
+            track = track
+        )
+        
+        scrobblesVec <- str_flatten(
+            c(
+                imap_chr(scrobbleTrack, function(x, y) {
+                    str_c(y, x)
+                }),
+                secret))    
+        
+        scrobblesHash <- openssl::md5(scrobblesVec)
+        scrobblesSigned <- scrobbleTrack
+        scrobblesSigned$api_sig <- scrobblesHash
+        
+        scrobblesURL <- httr::POST("http://ws.audioscrobbler.com/2.0/",
+                                   body = scrobblesSigned, encode = 'form')
+        res <- content(scrobblesURL)
+        res2 <- as_list(res)
+        res3 <- res2$lfm$scrobbles$scrobble
+        res3
+        
+    })
+
+    
+    
+    
+}
+scrobbleAlbum(timeStart = "2025-08-26 14:00")
