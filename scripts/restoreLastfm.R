@@ -12,6 +12,8 @@ baseurl <- paste0(
     "&api_key=", api, "&format=json&limit=200&page="
 )
 
+## Can also tell function to stop once it hits a certain date
+stopDate <- lubridate::ymd("2023-01-01")
 
 ## Find out how many responses in total
 res1 <- httr2::request(glue::glue("http://ws.audioscrobbler.com/2.0/?method=user.getinfo&user={user}&api_key={api}&format=json"))
@@ -28,12 +30,13 @@ restore <- data.frame(    )
 # So how many pages to get? Get 200 per page, so 
 # Get 200 per page and need ~120,000 responses, so ~600 pages in total?
 # Find the highest page?
+
+
+
 pages <- ceiling(howMany/200)
 i <- 1
 keepgoing = TRUE
 
-## Can also tell function to stop once it hits a certain date
-stopDate <- lubridate::ymd("2006-01-01")
 
 
 ## NB If it crashes, check i then start again including that number
