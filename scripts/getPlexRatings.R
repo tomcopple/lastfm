@@ -113,7 +113,29 @@ getPlexRatings <- function(refresh = FALSE, write = FALSE, printTree = FALSE) {
     return(plex)
 }
 
-plex <- getPlexRatings(T, T, T)
+plex <- getPlexRatings(T, F, F)
+
 
 albumRatings %>%
     filter(x == y)
+
+plex %>% 
+    filter(str_detect(album, 'Complete Motown')) %>% 
+    mutate(title = str_sub(album, start = -4)) %>% 
+    arrange(title) %>% 
+    mutate(title = forcats::fct_inorder(title)) %>% 
+    ggplot(aes(x = trackNum,y = rating,color = title, group = title,text = track)) + 
+    geom_point(alpha = 0.6) + 
+    stat_smooth(se = FALSE)
+
+plotly::ggplotly()
+
+plex %>% 
+    filter(str_detect(album,'Complete Motown')) %>% 
+    filter(!is.na(rating)) %>% 
+    group_by(album) %>% 
+    summarise(avrat = mean(rating)) %>% 
+    mutate(album = str_sub(album,-4)) %>% 
+    arrange(album) %>% 
+    ggplot(aes(x = avrat,y = album)) +geom_col(fill = 'lightblue')
+
