@@ -1,53 +1,143 @@
-# setwd('lastfmShiny')
+
 # getwd()
+# if (str_detect(getwd(), "Shiny", negate = T)) {
+    # setwd('lastfmShiny')
+# }
+
+
 # Setup -------------------------------------------------------------------
 
-library(shiny)
-library(shinymaterial)
-library(plotly)
-library(tidyverse)
-library(RColorBrewer)
-library(lubridate)
-library(rdrop2)
-library(zoo)
-library(stringr)
-library(forcats)
+suppressMessages({
+    library(shiny)
+    library(shinymaterial)
+    library(plotly)
+    library(tidyverse)
+    library(RColorBrewer)
+    library(lubridate)
+    library(zoo)
+    library(stringr)
+    library(forcats)
+    library(dropboxr)
+})
+
 
 ## NB Need to create a new Renviron file in this folder containing Lastfm API credentials
 ## usethis::edit_r_environ('project') then copy to lastfmShiny folder
 ## Won't be committed to github so need to recreate
 readRenviron(".Renviron")
+lastfm_user <- Sys.getenv('LASTFM_USER')
+lastfm_key <- Sys.getenv('LASTFM_APIKEY')
+dropbox_key <- Sys.getenv('DROPBOX_KEY')
+dropbox_secret <- Sys.getenv('DROPBOX_SECRET')
+
 print(str_c('Username: ', Sys.getenv('LASTFM_USER')))
 
-## Import local dropbox token
-# token <- rdrop2::drop_auth()
-# saveRDS(token, 'dropbox.rds')
-rdrop2::drop_auth(rdstoken = 'dropbox.rds')
+## Try dropbox authentication (run this locally first) ----
+# dropboxr::dropbox_auth(dropbox_key, dropbox_secret, cache_path = "dropbox.rds")
+dtoken <- readRDS('dropbox.rds')
 
+print(str_glue("Access token: {dtoken$credentials$access_token}"))
 
-## Download plex ratings
-rdrop2:::drop_download(path = 'R/lastfm/plexMasterRatings.csv',
-                       local_path = 'plexMasterRatings.csv',
-                       overwrite = T)
-ratings <- read_csv('plexMasterRatings.csv')
+## Download plex ratings ----
 
-    rdrop2::drop_download(path = 'R/lastfm/plexDB.csv',
-                      local_path = 'plexDB.csv',
-                      overwrite = T)
+access_token <- dtoken$credentials$access_token
+print("Downloading plex")
+plexDB <- dropboxr::download_dropbox_file('/R/lastfm/plexMasterRatings.csv', token = access_token)
 
-plexDB <- read_csv('plexDB.csv')
-source('getLastfmShiny.R')
-source('getSlugs.R')
+## Get lastfm scrobbles for Shiny App ----
+getLastfmShiny <- function(refresh = TRUE) {
+    
+    print("Getting Lastfm Shiny")
+    lastfmDownload <- dropboxr::download_dropbox_file("/R/lastfm/tracks.csv", token = dtoken)
+    maxDate = max(lastfmDownload$date)
+    
+    if (refresh) {
+        ## Start a response DF for new data
+        responseDF <- tibble()
+        pageNum <- 1
+        
+        # Keep getting data from lastfm until it's caught up with local data. 
+        while(min(responseDF$date) >= maxDate) {
+            
+            # 1. Build the request
+            req <- request("http://ws.audioscrobbler.com/2.0/") %>%
+                req_url_query(
+                    method = "user.getrecenttracks",
+                    user = lastfm_user,
+                    api_key = lastfm_key,
+                    format = "json",
+                    limit = 200,
+                    page = pageNum
+                )
+            
+            # 2. Perform request and process data
+            responseRaw <- req %>%
+                req_retry(max_tries = 3) %>% 
+                req_perform() %>%
+                resp_body_json(simplifyVector = TRUE, flatten = TRUE) %>%
+                purrr::pluck("recenttracks", "track") %>% 
+                select(
+                    track = name, 
+                    artist = `artist.#text`,
+                    album = `album.#text`, 
+                    date = `date.#text`
+                ) %>%
+                mutate(date = dmy_hm(date)) %>%
+                na.omit()
+            
+            responseDF <- bind_rows(responseDF, responseRaw) %>% 
+                arrange(desc(date))
+            pageNum <- pageNum + 1
+        }
+        
+        # Then filter response for new tracks, and add to localData
+        lastfmUpload <- dplyr::bind_rows(
+            dplyr::filter(responseDF, date > maxDate),
+            lastfmDownload
+        )
+        
+        ## Then save updated data as a local csv and upload back to Dropbox. 
+        dropboxr::upload_df_to_dropbox(lastfmUpload, "/R/lastfm/tracks.csv", token = dtoken)
+        
+        return(lastfmUpload)
+    } else {
+        return(lastfmDownload)
+    }
+    
+}
 
-refresh = TRUE
-# refresh = FALSE
+getSlugs <- function(text) {
+    text1 <- text %>% 
+        str_to_lower() %>% 
+        str_remove_all(pattern = "[[:punct:]]") %>% 
+        str_replace_all(pattern = "&", "and") %>% 
+        str_replace_all(pattern = "\\s{2,}", replacement = " ") %>% 
+        str_trim(side = 'both') %>% 
+        str_remove_all(pattern = "\\s\\(.*") %>% 
+        str_replace_all(pattern = " ", replacement = "-")
+    return(text1)
+}
+
+removeEve <- function(lastfmDF) {
+    lastfmDF <- lastfmDF %>% 
+        filter(
+            str_detect(artist, "Cocomelon", negate = T),
+            str_detect(artist, "Super Simple", negate = T),
+            str_detect(artist, "Duggee", negate = T),
+            str_detect(artist, "Lullaby", negate = T),
+            str_detect(artist, "Night Garden", negate = T),
+            str_detect(artist, 'Toddler Tunes', negate = T),
+            str_detect(artist, 'Pinkfong', negate = T)
+        )
+    return(lastfmDF)
+}
+
+# refresh = TRUE
+refresh = FALSE
 
 # Run the function
-if (refresh) {
-  lastfm <- getLastfmShiny()
-} else {
-  lastfm <- read_csv("tracks.csv")
-}
+lastfm <- getLastfmShiny(refresh = refresh) %>% 
+    removeEve()
 
 ## Get list of artists with more than 25 plays, and ignore 'The' and 'A' at
 # beginning of name in sorting
@@ -59,21 +149,6 @@ artistList <- lastfm %>%
   mutate(arrangeArtist = str_remove_all(artist, '^The |^A ')) %>%
   arrange(arrangeArtist) %>%
   pull(artist)
-
-removeEve <- function(lastfmDF) {
-  lastfmDF <- lastfmDF %>% 
-    filter(
-      str_detect(artist, "Cocomelon", negate = T),
-      str_detect(artist, "Super Simple", negate = T),
-      str_detect(artist, "Duggee", negate = T),
-      str_detect(artist, "Lullaby", negate = T),
-      str_detect(artist, "Night Garden", negate = T),
-      str_detect(artist, 'Toddler Tunes', negate = T),
-      str_detect(artist, 'Pinkfong', negate = T)
-    )
-  return(lastfmDF)
-}
-
 
 # UI ----------------------------------------------------------------------
 
@@ -110,14 +185,6 @@ ui <- material_page(
         ),
         material_card(
           title = "",
-          material_checkbox(
-            input_id = 'removeEve',
-            label = 'Remove Eve tracks',
-            color = 'purple'
-          )
-        ),
-        material_card(
-          title = "",
           material_radio_button(
             input_id = "chooseYear",
             label = "Select year:",
@@ -138,11 +205,11 @@ ui <- material_page(
           ),
         material_card(
           title = "", plotlyOutput("plotlyBar", height = "100%")
-          )
-        # h3("Plex Summary"),
-        # material_card(
-        #   title = "", plotlyOutput('yearRatings', height = "100%")
-        # )
+          ),
+        h3("Plex Summary"),
+        material_card(
+          title = "", plotlyOutput('yearRatings', height = "100%")
+        )
       )
     )
   ),
@@ -205,7 +272,7 @@ server <- function(input, output, session) {
       material_spinner_show(session, "trackPlays")
       material_spinner_show(session, "albumPlays")
       shiny::showNotification("Refreshing data, may take some time...", type = "default")
-      values$lastfm <- getLastfmShiny()
+      values$lastfm <- getLastfmShiny(T)
       shiny::showNotification("Done!", type = "message")
       material_spinner_hide(session, "trackPlays")
       material_spinner_hide(session, "albumPlays")
@@ -216,16 +283,10 @@ server <- function(input, output, session) {
   observeEvent({
     input$chooseYear
     input$chooseType
-    input$removeEve
   }, {
     chooseYear <- input$chooseYear
     chooseType <- input$chooseType
-    removeEve <- input$removeEve
-    
-    if (removeEve) {
-      values$lastfm <- removeEve(values$lastfm)
-    }
-    
+
     if (chooseYear == "All time") {
       top10data <- values$lastfm
       values$minDate <- as_date(min(top10data$date))
@@ -373,36 +434,36 @@ server <- function(input, output, session) {
   
   # Plotly: Album Ratings ------------------------------------------------------
   
-  # output$yearRatings <- renderPlotly({
-  #   
-  #   ## Join plexDB and lastfm to get plays/ratings
-  #   message('input$chooseType ', input$chooseType)
-  #   ratings <- inner_join(
-  #     plexDB %>% mutate(
-  #       newCol = case_when(
-  #         input$chooseType == 'Artists' ~ getSlugs(artist),
-  #         input$chooseType == 'Albums' ~ getSlugs(str_c(artist, " - ", album)),
-  #         input$chooseType == 'Tracks' ~ getSlugs(str_c(artist, " - ", track))
-  #       )),
-  #     values$top10data %>% mutate(newCol = getSlugs(newCol)),
-  #     by = 'newCol'
-  #   ) %>% 
-  #     distinct(artist, track, album, rating, trackNum, discNum, year, newCol)
-  #   
-  #   # print(head(ratings))
-  #   ratings %>% 
-  #     mutate(newColName = ifelse(nchar(newCol) > 25, str_c(str_sub(newCol, 0, 25), "..."), newCol)) %>% 
-  #     mutate(rating0 = replace_na(rating, 0)/2) %>% 
-  #     mutate(rating = rating/2) %>% 
-  #     mutate(text = str_c(artist, " - ", track, "<br>", album)) %>%
-  #     ggplot(aes(x = trackNum, y = rating0, group = newColName, color = newCol, text = text)) + 
-  #     theme(legend.title = element_blank()) +
-  #     # scale_y_continuous(expand = c(0,0), limits = c(0, 5)) +
-  #     xlab(NULL) + ylab(NULL) +
-  #     geom_jitter(alpha = 0.5) + 
-  #     geom_smooth(se = FALSE, span = 3, aes(y = rating))
-  #   plotly::ggplotly(tooltip = 'text')
-  # })
+  output$yearRatings <- renderPlotly({
+
+    ## Join plexDB and lastfm to get plays/ratings
+    message('input$chooseType ', input$chooseType)
+    ratings <- inner_join(
+      plexDB %>% mutate(
+        newCol = case_when(
+          input$chooseType == 'Artists' ~ getSlugs(artist),
+          input$chooseType == 'Albums' ~ getSlugs(str_c(artist, " - ", album)),
+          input$chooseType == 'Tracks' ~ getSlugs(str_c(artist, " - ", track))
+        )),
+      values$top10data %>% mutate(newCol = getSlugs(newCol)),
+      by = 'newCol'
+    ) %>%
+      distinct(artist, track, album, rating, trackNum, discNum, year, newCol)
+
+    # print(head(ratings))
+    ratings %>%
+      mutate(newColName = ifelse(nchar(newCol) > 25, str_c(str_sub(newCol, 0, 25), "..."), newCol)) %>%
+      mutate(rating0 = replace_na(rating, 0)/2) %>%
+      mutate(rating = rating/2) %>%
+      mutate(text = str_c(artist, " - ", track, "<br>", album)) %>%
+      ggplot(aes(x = trackNum, y = rating0, group = newColName, color = newCol, text = text)) +
+      theme(legend.title = element_blank()) +
+      # scale_y_continuous(expand = c(0,0), limits = c(0, 5)) +
+      xlab(NULL) + ylab(NULL) +
+      geom_jitter(alpha = 0.5) +
+      geom_smooth(se = FALSE, span = 3, aes(y = rating))
+    plotly::ggplotly(tooltip = 'text')
+  })
   
   
   
