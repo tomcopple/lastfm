@@ -13,161 +13,12 @@ runtime: shiny
 library(flexdashboard);library(tidyverse);library(httr);library(httr2)
 library(lubridate);library(treemapify);library(plotly)
 library(jsonlite);library(DT);library(treemapify)
+library(dropboxr)
 
 getwd() %>% print()
 
 source(here::here('scripts', 'getLastfm.R'))
 source(here::here('scripts', 'getPlex.R'))
-
-# token <- drop_auth(new_user = T)
-# saveRDS(token, 'scripts/dropbox.rds')
-
-dropboxClient <- oauth_client(
-        id = Sys.getenv('DROPBOX_KEY'),
-        secret = Sys.getenv('DROPBOX_SECRET'),
-        token_url = "https://api.dropboxapi.com/oauth2/token",
-        name = 'Rstudio_TC'
-    )
-dropboxToken <- readRDS(here::here('dropbox.RDS'))
-
-# Functions -----
-# getPlex <- function(refresh = FALSE) {
-#   
-#   if (refresh) {
-#     
-#       plexToken <- "o8xPSiPMQtky4cxEtdKW"
-#     plexRaw <- content(GET("http://192.168.1.202:32400/library/sections/3/search?type=10", add_headers("X-Plex-Token" = plexToken)), type = 'text') %>% 
-#       jsonlite::fromJSON() %>% 
-#       pluck('MediaContainer') %>% 
-#       pluck('Metadata')
-#     
-#     plex <- plexRaw %>% select(
-#       albumArtist    = grandparentTitle, 
-#       artist      = originalTitle, 
-#       album       = parentTitle, 
-#       track       = title, 
-#       rating      = userRating,
-#       key         = ratingKey,
-#       artistKey   = grandparentRatingKey,
-#       albumKey    = parentRatingKey,
-#       trackNum       = index,
-#       discNum        = parentIndex,
-#       year           = parentYear
-#     ) %>% 
-#       mutate(artist = ifelse(is.na(artist), albumArtist, artist)) %>% 
-#       as_tibble()
-#     
-#     write.csv(plex, file = here::here('tempData', 'plexDB.csv'), 
-#               row.names = FALSE, fileEncoding = "UTF-8")
-#     # rdrop2::drop_upload(file = here::here('tempData', "plexDB.csv"), 
-#     #                     path = "R/lastfm", dtoken = token)
-#     
-#   } else {
-#       reqDownload <-
-#           request("https://content.dropboxapi.com/2/files/download") %>%
-#           req_oauth_refresh(client = dropboxClient,
-#                             refresh_token = dropboxToken$refresh_token) %>%
-#           req_method('POST') %>%
-#           req_headers('Dropbox-API-Arg' = str_c('{',
-#                                                 '"path":"/R/lastfm/plexDB.csv"',
-#                                                 '}'))
-#       
-#       respDownload <- req_perform(reqDownload,
-#                                   here::here('tempData', 'plexDB.csv'))
-#       
-#       plex <-
-#           readr::read_csv(here::here('tempData', 'plexDB.csv'), show_col_types = FALSE)
-#       
-#       
-#   }
-#   
-#   return(plex)
-#   
-# }
-
-# getLastfm <- function(refresh = TRUE) {
-#     library(tidyverse);library(here)
-#     
-#     reqDownload <-
-#           request("https://content.dropboxapi.com/2/files/download") %>%
-#           req_oauth_refresh(client = dropboxClient,
-#                             refresh_token = dropboxToken$refresh_token) %>%
-#           req_method('POST') %>%
-#           req_headers('Dropbox-API-Arg' = str_c('{',
-#                                                 '"path":"/R/lastfm/tracks.csv"',
-#                                                 '}'))
-#       
-#       respDownload <- req_perform(reqDownload,
-#                                   here::here('tempData', 'tracks.csv'))
-#       
-#       localData <-
-#           readr::read_csv(here::here('tempData', 'tracks.csv'), show_col_types = FALSE) %>% 
-#           filter(!is.na(date))
-# 
-#     
-#     if (refresh) {
-#         maxDate = max(localData$date)
-#         user <- Sys.getenv('LASTFM_USER')
-#         api <- Sys.getenv('LASTFM_APIKEY')
-#         
-#         responseDF <- tibble()
-#         pageNum <- 1
-#         
-#         # Keep getting data from lastfm until it's caught up with local data.
-#         while (min(responseDF$date) >= maxDate) {
-#             url <- paste0(
-#                 "http://ws.audioscrobbler.com/2.0/?method=user.getrecenttracks&user=",
-#                 user,
-#                 "&api_key=",
-#                 api,
-#                 "&format=json&limit=200&page=",
-#                 pageNum
-#             )
-#             responseRaw <- url %>%
-#                 httr::GET(.) %>%
-#                 httr::content(., as = "text") %>%
-#                 jsonlite::fromJSON(., simplifyDataFrame = T, flatten = T) %>%
-#                 magrittr::extract2(c('recenttracks', 'track')) %>%
-#                 select(
-#                     track = name,
-#                     artist = `artist.#text`,
-#                     album = `album.#text`,
-#                     date = `date.#text`
-#                 ) %>%
-#                 mutate(date = lubridate::dmy_hm(date)) %>%
-#                 na.omit()
-#             responseDF <- bind_rows(responseDF, responseRaw) %>%
-#                 arrange(desc(date))
-#             pageNum <- pageNum + 1
-#         }
-#         
-#         # Then filter response for new tracks, and add to localData
-#         localData <- bind_rows(filter(responseDF, date > maxDate),
-#                                localData)
-#         
-#         ## Write a local csv (ignored in git) and upload to Dropbox. 
-#         write.csv(localData, file = here::here('tempData', 'tracks.csv'), 
-#                   row.names = FALSE, fileEncoding = "UTF-8")
-#         
-#         reqUpload <- request('https://content.dropboxapi.com/2/files/upload/') %>% 
-#             req_oauth_refresh(client = dropboxClient, 
-#                               refresh_token = dropboxToken$refresh_token) %>% 
-#             req_headers('Content-Type' = 'application/octet-stream') %>% 
-#             req_headers(
-#                 'Dropbox-API-Arg' = str_c('{',
-#                                           '"autorename":false,',
-#                                           '"mode":"overwrite",',
-#                                           '"path":"/R/lastfm/tracks.csv",',
-#                                           '"strict_conflict":false', 
-#                                           '}')
-#             ) %>% 
-#             req_body_file(path = here::here('tempData', 'tracks.csv'))
-#         
-#         respUpload <- req_perform(reqUpload)
-#     }
-#     
-#     return(localData)
-# }
 
 getSlugs <- function(text) {
     
@@ -613,7 +464,8 @@ rv$plexYear %>%
   filter(count > 2) %>% 
   slice(1:50) %>% 
   unnest() %>% 
-  mutate(rating = as.factor(rating/2)) %>%
+  # mutate(rating = as.factor(rating/2)) %>%
+    mutate(rating = rating/2) %>% 
     ## Don't think we really need to include artist here
   # mutate(title = str_c(artist, album, sep = ' - ')) %>% 
     mutate(title = album) %>% 
@@ -624,7 +476,8 @@ rv$plexYear %>%
   geom_point(shape = 21, size = 6) +
   scale_fill_manual("", values = colPal,
                     limits = c(0, 1, 2, 3, 4, 5),
-                    labels = c(0, 1, 2, 3, 4, 5)) +    xlab(NULL) + ylab(NULL)
+                    labels = c(0, 1, 2, 3, 4, 5)) +    
+    xlab(NULL) + ylab(NULL)
 
 })
 
