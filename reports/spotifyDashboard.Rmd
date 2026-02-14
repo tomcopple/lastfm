@@ -1,0 +1,199 @@
+---
+title: "Spotify Plays"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: columns
+    vertical_layout: scroll
+runtime: shiny
+---
+
+```{r global, include=FALSE}
+library(flexdashboard);library(tidyverse);
+library(httr2);library(jsonlite);library(shiny);library(DT)
+print(getwd())
+source(here::here("R", "bootstrap.R"))
+source_project("R", "lib", "getLastfm.R")
+source_project("R", "lib", "getSlugs.R")
+
+lastfm <- getLastfm(F)
+
+## Spotify Auth
+# Spotify auth ------------------------------------------------------------
+spotID <- Sys.getenv('SPOTIFY_ID')
+spotSecret <- Sys.getenv('SPOTIFY_SECRET')
+spotAuth <- "https://accounts.spotify.com/authorize"
+
+spotClient <- httr2::oauth_client(
+    id = spotID,
+    secret = spotSecret,
+    token_url = "https://accounts.spotify.com/api/token",
+    name = "last2spot"
+)
+
+getSpotAuth <- function (req) {
+    req_oauth_auth_code(
+        req,
+        client = spotClient,
+        auth_url = spotAuth, 
+        scope = str_c('playlist-read-private',
+                      'playlist-read-collaborative',
+                      sep = " "),
+        cache_disk = TRUE,
+        redirect_uri = "http://localhost:1410/"
+    )
+}
+# Get list of playlists ---------------------------------------------------
+plReq <- httr2::request(base_url = "https://api.spotify.com/v1/users/tomcopple/playlists") %>% 
+    getSpotAuth() %>% 
+    req_perform()
+plResp <- plReq %>% resp_body_json()
+howManyPlaylists <- plResp %>% pluck('total')
+
+allPlaylists <- data.frame()
+reps <- howManyPlaylists %/% 50 + 1
+
+for (i in 1:reps) {
+    getPlReq <- httr2::request(base_url = "https://api.spotify.com/v1/users/tomcopple/playlists") %>% 
+        getSpotAuth() %>% 
+        req_url_query(limit = 50, offset = 50 * (i - 1))
+    getPlResp <- getPlReq %>% 
+        req_perform() %>% 
+        resp_body_string() %>% 
+        jsonlite::fromJSON()
+    getPlaylists <- getPlResp %>% 
+        pluck('items') %>% 
+        select_if(names(.) %in% c('name', 'id', 'images')) %>% 
+        mutate(images = map_chr(images, function(x) {
+            if(!is.null(x$url)) {
+                # print(names(x))
+                x %>% pull(url) %>% first()
+            } else {
+                ""
+            }
+        }))
+    allPlaylists <- bind_rows(allPlaylists, getPlaylists) %>% 
+        arrange(name)
+}
+
+```
+
+Column {.sidebar}
+-----------------------------------------------------------------------
+
+### Select playlist
+
+```{r}
+shiny::radioButtons(inputId = 'choosePlaylist', label = 'Select playlist',
+                    choiceValues = allPlaylists$id,
+                    choiceNames = allPlaylists$name,
+                    selected = first(allPlaylists$id))
+
+actionButton(inputId = 'refreshLastfm', label = 'Refresh Lastfm', icon = icon('refresh'))
+
+rv <- reactiveValues(lastfm = lastfm,
+                     allPlaylists = allPlaylists)
+
+observeEvent(input$choosePlaylist, {
+    choosePlaylist <- input$choosePlaylist
+   rv$imageURL <- filter(allPlaylists,
+                               id == choosePlaylist) %>% 
+                         pull('images')
+})
+observeEvent(eventExpr = input$refreshLastfm,
+             handlerExpr = {
+                 showNotification('Updating Lastfm...')
+                 rv$lastfm <- getLastfm(T)
+                 showNotification('Lastfm updated!', type = 'message')
+             })
+```
+
+Column {data-width=600}
+-----------------------------------------------------------------------
+
+### Table of Plays
+
+```{r}
+DT::renderDataTable({
+    playlistID <- input$choosePlaylist
+
+## Can only get 100 tracks at a time, so need to know how many times to run it
+totalTracksReq <- httr2::request(base_url = str_glue(
+    'https://api.spotify.com/v1/playlists/{playlistID}/tracks'
+    )) %>% 
+    getSpotAuth()
+totalTracksResp <- httr2::req_perform(totalTracksReq) %>% 
+    resp_body_json()
+totalTracks <- totalTracksResp %>% pluck('total')
+
+offsets <- seq.int(from = 0, to = floor(totalTracks/100))
+
+## Define function to get tracks
+## x is offset, i.e. starts at 1 and goes up (defined by i)
+getTracks <- function(x) {
+    tracksReq <- httr2::request(
+        base_url = str_glue('https://api.spotify.com/v1/playlists/{playlistID}/tracks'
+                            )) %>% 
+        getSpotAuth() %>% 
+        req_url_query(
+            fields = "items(track(artists.name,album(name),track_number,name))",
+            limit = 100, 
+            offset = x*100) %>% 
+        req_perform()
+    tracksResp <- tracksReq %>% 
+        resp_body_string() %>% 
+        jsonlite::fromJSON()
+    tracks <- tracksResp %>% 
+        pluck('items', 'track') %>% 
+        as_tibble() %>% 
+        mutate(album = purrr::flatten_chr(album)) %>% 
+        mutate(artist = purrr::map_chr(artists, function(x) first(unlist(x))), .keep = 'unused') %>% 
+        rename(track = name)
+    return(tracks)
+}
+
+tracks <- map_df(offsets, getTracks)
+
+lastfm <- rv$lastfm
+
+## Merge together
+trackCount <- tracks %>% 
+    mutate(track_join = getSlugs(track),
+           artist_join = getSlugs(artist)) %>% 
+    left_join(lastfm %>% 
+                  transmute(track_join = getSlugs(track),
+                            artist_join = getSlugs(artist)) %>% 
+                  count(artist_join, track_join),
+              by = c('artist_join', 'track_join')) %>% 
+    select(!contains('_join')) %>% 
+  mutate(n = replace_na(n, 0)) %>% 
+    select(artist, track, album, n)
+
+DT::datatable(trackCount, options = list(
+    pageLength = 25
+))
+})
+
+```
+
+Column {data-width=200}
+-----------------------------------------------------------------------
+
+### 
+
+```{r picture, echo = F, fig.cap = "Title", out.width = '100%'}
+# image <- rv$allPlaylists %>% 
+#     filter(id == input$choose)
+# shiny::renderImage({
+#     print(rv$imageURL)
+# list(src = rv$imageURL,
+#          contentType = 'image/png',
+#          width = 300,
+#          height = 300,
+#          alt = "This is alternate text")})
+# knitr::include_graphics('tempData/image.png')
+shiny::renderUI({
+    tags$img(src = rv$imageURL,
+             width = "250px", height = "250px"
+               )
+})
+```

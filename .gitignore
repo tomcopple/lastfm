@@ -3,7 +3,7 @@
 .RData
 .Ruserdata
 .gitignore
-lastfmShiny/.Renviron
+apps/lastfm-shiny/.Renviron
 .Renviron
 .Rapp.history
 *.rds
