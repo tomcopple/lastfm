@@ -1,7 +1,7 @@
 
 # getwd()
 # if (str_detect(getwd(), "Shiny", negate = T)) {
-    # setwd('lastfmShiny')
+# setwd('lastfmShiny')
 # }
 
 
@@ -42,7 +42,7 @@ print(str_glue("Access token: {dtoken$credentials$access_token}"))
 
 access_token <- dtoken$credentials$access_token
 print("Downloading plex")
-plexDB <- dropboxr::download_dropbox_file('/R/lastfm/plexMasterRatings.csv', token = access_token)
+plexDB <- dropboxr::download_dropbox_file('/R/lastfm/plexDB.csv', token = access_token)
 
 ## Get lastfm scrobbles for Shiny App ----
 getLastfmShiny <- function(refresh = TRUE) {
@@ -515,7 +515,7 @@ server <- function(input, output, session) {
     ## But only if the artist is in Plex?
     if (str_to_lower(values$chooseArtist) %in% str_to_lower(plexDB$artist)) {
       values$ratings <- plexDB %>%
-        # filter(artist == 'Sault') %>%
+        # filter(artist == 'Bright Eyes') %>%
         filter(str_to_lower(artist) == str_to_lower(values$chooseArtist)) %>%
         filter(albumArtist != "Various Artists") %>%
         group_by(album) %>%
@@ -626,29 +626,44 @@ server <- function(input, output, session) {
                   '#3B50B2')
       
       print(unique(values$ratings$album))
-      values$ratings %>% 
-        mutate(rating = ifelse(rating == 0, NA, rating)) %>% 
-        group_by(album) %>% 
-        mutate(y = n()) %>% 
-        na.omit() %>% 
-        mutate(x = n()) %>% 
-        group_by(album, x, y) %>% summarise(avRat = mean(rating), .groups = 'drop') %>% 
-        mutate(albumName = as.character(album)) %>% 
-        mutate(album = ifelse(nchar(albumName) > 15, 
-                              str_c(str_sub(albumName, 0, 13), "..."),
-                              albumName)) %>% 
-        arrange(avRat) %>% 
-        mutate(albumName = str_c(albumName, "\n", "(", round(avRat, 1), ")")) %>% 
-        mutate(album = forcats::fct_inorder(albumName)) %>% 
-        mutate(compRat = (x/y)*avRat) %>% 
-        select(-x, -y, -albumName) %>% 
-        gather(-album, key = series, value = Rating) %>% 
-        ggplot(aes(x = album, y = Rating, group = series, fill = series)) +
-        geom_col(position = 'identity', color = colors[6], size = 1) +
-        scale_fill_manual(values = c(colors[1], colors[5])) + 
-        coord_flip() +
-        labs(x = NULL) +
-        theme(legend.position = 'none')
+      ratingsPlot <- values$ratings %>%
+        mutate(rating = replace_na(rating, 0)) %>%
+        mutate(trackNumRaw = suppressWarnings(as.numeric(trackNum))) %>%
+        group_by(album) %>%
+        arrange(trackNumRaw, .by_group = TRUE) %>%
+        mutate(trackIndex = ifelse(is.na(trackNumRaw), row_number(), trackNumRaw)) %>%
+        ungroup() %>%
+        mutate(album = as.character(album)) %>%
+        mutate(album = ifelse(nchar(album) > 25,
+                              str_c(str_sub(album, 0, 22), "..."),
+                              album))
+        # group_by(album) %>%
+        # mutate(avRat = mean(ifelse(rating == 0, NA, rating), na.rm = TRUE)) %>%
+        # ungroup() %>%
+        # mutate(avRat = ifelse(is.nan(avRat), 0, avRat)) %>%
+        # mutate(album = forcats::fct_reorder(album, avRat))
+
+      ggplot(ratingsPlot, aes(x = trackIndex, y = album)) +
+        geom_point(
+          aes(fill = rating),
+          shape = 21,
+          size = 3,
+          stroke = 1,
+          color = colors[6]
+        ) +
+        scale_fill_gradientn(
+          colors = colors,
+          limits = c(0, 5),
+          breaks = 0:5,
+          labels = c('Unrated ', as.character(1:5)),
+          name = NULL
+        ) +
+        scale_x_continuous(
+          breaks = function(x) seq(floor(min(x, na.rm = TRUE)), ceiling(max(x, na.rm = TRUE)), by = 1),
+          labels = function(x) formatC(x, format = 'f', digits = 0)
+        ) +
+        labs(x = NULL, y = NULL) +
+        theme(legend.position = 'bottom')
       
     }
   )
