@@ -5,14 +5,21 @@ output:
     orientation: rows
     vertical_layout: scroll
 runtime: shiny
-    
 ---
 
 ```{r global, include = FALSE, cache = TRUE}
 # Load data in global chunk so it's accessible
-library(flexdashboard);library(tidyverse);library(httr);library(httr2)
-library(lubridate);library(treemapify);library(plotly);library(shiny)
-library(jsonlite);library(DT);library(treemapify)
+library(flexdashboard)
+library(tidyverse)
+library(httr)
+library(httr2)
+library(lubridate)
+library(treemapify)
+library(plotly)
+library(shiny)
+library(jsonlite)
+library(DT)
+library(RColorBrewer)
 library(dropboxr)
 
 getwd() %>% print()
@@ -22,38 +29,76 @@ source_project("R", "lib", "getLastfm.R")
 source_project("R", "lib", "getPlex.R")
 
 getSlugs <- function(text) {
-    
-    library(stringr)
-    text1 <- text %>% 
-        str_to_lower() %>% 
-        str_remove_all(pattern = "[[:punct:]]") %>% 
-        str_replace_all(pattern = "&", "and") %>% 
-        str_replace_all(pattern = "\\s{2,}", replacement = " ") %>% 
-        str_trim(side = 'both') %>% 
-        str_remove_all(pattern = "\\s\\(.*") %>% 
-        str_replace_all(pattern = " ", replacement = "-")
-    
-    return(text1)
-    
+  text %>% 
+    stringr::str_to_lower() %>% 
+    stringr::str_remove_all(pattern = "[[:punct:]]") %>% 
+    stringr::str_replace_all(pattern = "&", "and") %>% 
+    stringr::str_replace_all(pattern = "\\s{2,}", replacement = " ") %>% 
+    stringr::str_trim(side = "both") %>% 
+    stringr::str_remove_all(pattern = "\\s\\(.*") %>% 
+    stringr::str_replace_all(pattern = " ", replacement = "-")
+}
+
+apply_year_selection <- function(plex_data, year_choice) {
+  if (is.null(year_choice) || year_choice == "All") {
+    return(list(chooseYear = 3000, plexYear = plex_data))
+  }
+
+  if (stringr::str_detect(year_choice, "^1")) {
+    min_year <- as.numeric(year_choice)
+    max_year <- min_year + 9
+    return(list(
+      chooseYear = min_year,
+      plexYear = dplyr::filter(plex_data, year >= min_year, year <= max_year)
+    ))
+  }
+
+  selected_year <- as.numeric(year_choice)
+  list(
+    chooseYear = year_choice,
+    plexYear = dplyr::filter(plex_data, year == selected_year)
+  )
+}
+
+set_year_state <- function(rv, plex_data, year_choice) {
+  year_state <- apply_year_selection(plex_data, year_choice)
+  rv$chooseYear <- year_state$chooseYear
+  rv$plexYear <- year_state$plexYear
+}
+
+artist_choices <- function(plex) {
+  plex %>%
+    dplyr::filter(!is.na(.data$albumArtist), .data$albumArtist != "Various Artists") %>%
+    dplyr::distinct(.data$albumArtist) %>%
+        dplyr::mutate(order = str_remove_all("^The ", albumArtist)) %>% 
+    dplyr::arrange(.data$order) %>%
+    dplyr::pull(.data$albumArtist)
+}
+
+complete_album_filter <- function(data) {
+  data %>%
+    dplyr::group_by(.data$album) %>%
+    dplyr::filter(dplyr::n() >= max(.data$trackNum, na.rm = TRUE) - 3) %>%
+    dplyr::ungroup()
 }
 
 # Use functions -----
 removeEve <- function(lastfm) {
   lastfm <- lastfm %>% 
     filter(
-      str_detect(artist, "Cocomelon", negate = T),
-      str_detect(artist, "Super Simple", negate = T),
-      str_detect(artist, "Duggee", negate = T),
-      str_detect(artist, "Lullaby", negate = T),
-      str_detect(artist, "Night Garden", negate = T),
-      str_detect(track, 'Night Garden', negate = T),
-      str_detect(artist, 'Toddler Tunes', negate = T),
-      str_detect(artist, 'Pinkfong', negate = T),
-      str_detect(artist, 'Idina Menzel', negate = T),
-      str_detect(artist, 'Stephanie Beatriz', negate = T),
-      str_detect(artist, 'Dwayne Johnson', negate = T),
-      str_detect(artist, 'Bluey', negate = T),
-      str_detect(track, 'Hey Gabby', negate = T)
+      stringr::str_detect(artist, "Cocomelon", negate = TRUE),
+      stringr::str_detect(artist, "Super Simple", negate = TRUE),
+      stringr::str_detect(artist, "Duggee", negate = TRUE),
+      stringr::str_detect(artist, "Lullaby", negate = TRUE),
+      stringr::str_detect(artist, "Night Garden", negate = TRUE),
+      stringr::str_detect(track, "Night Garden", negate = TRUE),
+      stringr::str_detect(artist, "Toddler Tunes", negate = TRUE),
+      stringr::str_detect(artist, "Pinkfong", negate = TRUE),
+      stringr::str_detect(artist, "Idina Menzel", negate = TRUE),
+      stringr::str_detect(artist, "Stephanie Beatriz", negate = TRUE),
+      stringr::str_detect(artist, "Dwayne Johnson", negate = TRUE),
+      stringr::str_detect(artist, "Bluey", negate = TRUE),
+      stringr::str_detect(track, "Hey Gabby", negate = TRUE)
     )
 }
 
@@ -73,26 +118,11 @@ observeEvent(eventExpr = input$refreshPlex,
              handlerExpr = {
                showNotification("Updating Plex...")
                rv$plex <- getPlex(T)
-               if (is.null(input$chooseYear) || input$chooseYear == "All") {
-                 rv$chooseYear <- 3000
-                 rv$plexYear <- rv$plex
-               } else if (str_detect(input$chooseYear, "^1")) {
-                 minYear <- as.numeric(input$chooseYear)
-                 maxYear <- minYear + 9
-                 rv$chooseYear <- minYear
-                 rv$plexYear <- filter(rv$plex, year >= minYear, year <= maxYear)
-               } else {
-                 rv$chooseYear <- input$chooseYear
-                 rv$plexYear <- filter(rv$plex, year == as.numeric(input$chooseYear))
-               }
+               set_year_state(rv, rv$plex, input$chooseYear)
                shiny::updateSelectizeInput(
                  session,
                  inputId = "compareArtist",
-                 choices = rv$plex %>%
-                   filter(!is.na(albumArtist), albumArtist != "Various Artists") %>%
-                   distinct(albumArtist) %>%
-                   arrange(albumArtist) %>%
-                   pull(albumArtist),
+                 choices = artist_choices(rv$plex),
                  selected = input$compareArtist,
                  server = TRUE
                )
@@ -108,66 +138,58 @@ observeEvent(eventExpr = input$refreshLastfm,
 
 observeEvent(eventExpr = input$chooseYear,
              handlerExpr = {
-               ## Option 1: All time
-               if (input$chooseYear == "All") {
-                 rv$chooseYear <- 3000
-                 rv$plexYear <- rv$plex
-                 ## Option 2: 1950s - 1990s (decades)
-               } else if (str_detect(input$chooseYear, "^1")) {
-                 minYear <- as.numeric(input$chooseYear)
-                 maxYear <- minYear + 9
-                 rv$chooseYear <- minYear
-                 rv$plexYear <- filter(rv$plex, year >= minYear, year <= maxYear)
-                 ## Option 3: 2000 onwards (years)
-               } else {
-                 rv$chooseYear <- input$chooseYear
-                 rv$plexYear <- filter(rv$plex, year == as.numeric(input$chooseYear))  
-               }
-               
+               set_year_state(rv, rv$plex, input$chooseYear)
              })
 ```
 
-Artist Comparison
-======================
+# Artist Comparison
 
-Sidebar {.sidebar data-width=300}
------------------------------------------------------------------------
+## Artists Sidebar {.sidebar data-width="300"}
 
 ```{r}
-shiny::selectizeInput(
+shiny::radioButtons(
   inputId = "compareArtist",
   label = "Select artist",
-  choices = plex %>%
-    filter(!is.na(albumArtist), albumArtist != "Various Artists") %>%
-    distinct(albumArtist) %>%
-    arrange(albumArtist) %>%
-    pull(albumArtist),
-  selected = plex %>%
-    filter(!is.na(albumArtist), albumArtist != "Various Artists") %>%
-    distinct(albumArtist) %>%
-    arrange(albumArtist) %>%
-    pull(albumArtist) %>%
-    first(),
-  options = list(placeholder = "Choose an artist")
-)
-
-shiny::checkboxInput(
-  inputId = "compareCompleteArtist",
-  label = "Only include complete ratings",
-  value = FALSE
+  choices = artist_choices(plex),
+  # options = list(placeholder = "Choose an artist"),
+  selected = artist_choices(plex) %>% sample(1)
 )
 ```
 
-Row {data-height=90}
------------------------------------------------------------------------
+## Row {data-height="90"}
 
 ### 
 
-```{r}
+```{r, out.width = "100%", fig.height = 0.5, eval = T}
+renderPlot({
+  progress <-  rv$plex %>%
+      filter(albumArtist == input$compareArtist) %>%
+      # filter(albumArtist == 'Damien Jurado') %>% 
+    summarise(n1 = n(), n2 = sum(!is.na(rating))) %>% 
+    transmute(perc = n2/n1, tot = 1-perc) %>% 
+    gather() %>% rowwise() %>%  
+    mutate(label = ifelse(test = key == 'perc', 
+                          yes = str_c(round(100*value, 0), "%"), no = "")) %>% 
+    ggplot(aes(x = 1, y = value, fill = rev(key), alpha = rev(key))) + 
+    geom_col(position = 'fill', color = "#003EBB") + 
+    coord_flip() + 
+    scale_fill_manual(values = (c("#C1D1F4", "#003EBB"))) + 
+    scale_alpha_manual(values = c(0.5, 1)) + 
+    geom_label(aes(label = label, y = 0.9), size = 3, fill = 'white', linewidth = 0, fontface = 2)  + 
+    theme_void()+ 
+    theme(legend.position = 'none', 
+          plot.background = element_rect(fill = 'white', color = 'white'),
+          panel.grid.major = element_blank(),
+          panel.grid.minor = element_blank(),
+          panel.border = element_blank()) +
+      ggtitle(input$compareArtist)
+  # ggplotly(progress) %>% layout(height=80)
+  progress
+})
+
 ```
 
-Row
------------------------------------------------------------------------
+## Row
 
 ### Artist Albums
 
@@ -176,9 +198,10 @@ DT::renderDataTable({
   req(input$compareArtist)
 
   artistAlbums <- rv$plex %>%
-    filter(albumArtist == input$compareArtist) %>%
+      filter(albumArtist == 'The Flaming Lips') %>% 
+    # filter(albumArtist == input$compareArtist) %>%
+    complete_album_filter() %>%
     group_by(album) %>%
-    filter(n() >= max(trackNum, na.rm = TRUE) - 3) %>%
     summarise(
       rated = sum(!is.na(rating)),
       total = n(),
@@ -191,8 +214,8 @@ DT::renderDataTable({
       avRat = ifelse(is.nan(avRat), NA, avRat)
     ) %>%
     left_join(
-      rv$lastfm %>%
-        filter(artist == input$compareArtist) %>%
+      # rv$lastfm %>%filter(artist == input$compareArtist) %>%
+          lastfm %>% filter(artist == 'The Flaming Lips') %>% 
         count(album, name = "Plays"),
       by = "album"
     ) %>%
@@ -200,74 +223,117 @@ DT::renderDataTable({
     unite(col = 'n', rated, total, sep = "/") %>%
     arrange(desc(avRat), desc(Plays))
 
-  if (input$compareCompleteArtist) {
-    artistAlbums <- artistAlbums %>%
-      separate(col = 'n', into = c('rated', 'total'), sep = "/", remove = FALSE) %>%
-      filter(rated == total) %>%
-      select(-rated, -total)
-  }
+  # if (input$compareCompleteArtist) {
+  #   artistAlbums <- artistAlbums %>%
+  #     separate(col = 'n', into = c('rated', 'total'), sep = "/", remove = FALSE) %>%
+  #     filter(rated == total) %>%
+  #     select(-rated, -total)
+  # }
 
   DT::datatable(artistAlbums, options = list(pageLength = 20))
 })
 ```
 
-Row
------------------------------------------------------------------------
+## Row
 
-### Album Comparison
+### Ratings (circles)
+
+```{r, eval = T}
+renderPlot({
+  req(input$compareArtist)
+ 
+  plotData <- rv$plex %>%
+      filter(albumArtist == input$compareArtist) %>% 
+      select(albumArtist, album, track, trackNum, rating) %>% 
+    complete_album_filter() %>%
+    mutate(album = ifelse(nchar(album) > 24,
+                          str_c(str_sub(album, 0, 22), "..."),
+                          album)) %>%
+    mutate(rating0 = replace_na(rating, 0)) %>%
+    group_by(album) %>% 
+    mutate(avRat = mean(rating, na.rm = T), count = n()) %>% 
+      filter(count > 2) %>%  
+    mutate(rating = rating0/2, avRat = avRat/2) %>% 
+    mutate(title = album) %>% 
+    arrange(title) %>% 
+    mutate(title = forcats::fct_rev(title))
+
+  if (nrow(plotData) == 0) {
+    ggplot() +
+      theme_void() +
+      annotate("text", x = 0, y = 0, label = "No albums found for current artist")
+  } else {
+    plotData %>%
+      ggplot(aes(x = trackNum, y = title, fill = rating)) +
+      geom_point(shape = 21, size = 6) +
+          scale_fill_gradient("",
+                low = "#FFFFFF",   
+                high = "#3c50b1",  
+                limits = c(0, 5),  
+                breaks = 0:5) +
+      xlab(NULL) + ylab(NULL)
+  }
+
+})
+
+```
+
+
+### Ratings (lines)
 
 ```{r}
 renderPlotly({
   req(input$compareArtist)
-
-  plotData <- rv$plex %>%
+    
+   plotData <- rv$plex %>%
     filter(albumArtist == input$compareArtist) %>%
-    group_by(album) %>%
-    filter(n() >= max(trackNum, na.rm = TRUE) - 3) %>%
-    summarise(
-      rated = sum(!is.na(rating)),
-      total = n(),
-      avRat = round(mean(rating, na.rm = TRUE) / 2, 2),
-      .groups = 'drop'
-    ) %>%
-    mutate(avRat = ifelse(is.nan(avRat), NA, avRat)) %>%
-    left_join(
-      rv$lastfm %>%
-        filter(artist == input$compareArtist) %>%
-        count(album, name = "Plays"),
-      by = "album"
-    ) %>%
-    mutate(Plays = replace_na(Plays, 0)) %>%
-    mutate(album = forcats::fct_reorder(album, avRat, .na_rm = TRUE))
-
-  if (input$compareCompleteArtist) {
-    plotData <- plotData %>% filter(rated == total)
-  }
-
-  plotly::plot_ly(
-    data = plotData,
-    x = ~avRat,
-    y = ~album,
-    type = 'bar',
-    orientation = 'h',
-    text = ~str_c("Rated: ", rated, "/", total, "<br>Plays: ", Plays),
-    hoverinfo = 'text',
-    marker = list(color = "#809FDD", line = list(color = "#003EBB", width = 1))
-  ) %>%
-    plotly::layout(
-      xaxis = list(title = "Average rating"),
-      yaxis = list(title = ""),
-      showlegend = FALSE,
-      margin = list(l = 200)
-    )
+    complete_album_filter() %>%
+      filter(!is.na(rating)) %>% 
+      distinct(album, track, rating, trackNum) %>%
+      mutate(trackNum = suppressWarnings(as.numeric(trackNum))) %>%
+      filter(!is.na(trackNum))
+   
+   numberOfAlbums <- length(unique(plotData$album))
+   
+   smoothPoints <- plotData %>% 
+       group_by(album) %>% 
+       arrange(trackNum, .by_group = TRUE) %>% 
+       mutate(
+         n = dplyr::n(),
+         avRat = mean(rating),
+         smooth = if (n() >= 4 && n_distinct(trackNum) >= 4) {
+             fit <- loess(rating ~ trackNum, data = cur_data(), 
+                          span = 0.75, degree = 2)
+             predict(fit, newdata = cur_data()["trackNum"])
+             } else {
+                 avRat
+                 }
+       ) %>% 
+       ungroup()
+      
+   plot_ly() %>% 
+      plotly::add_lines(
+          data = smoothPoints, showlegend = FALSE,
+          x = ~trackNum, y = ~smooth/2, line = list(shape = "spline", smoothing = 2.2),
+          color = ~album, 
+          colors = colorRampPalette(brewer.pal(11, 'Spectral'))(numberOfAlbums)
+      ) %>% 
+       plotly::add_markers(
+           data = plotData, 
+           x = ~trackNum, y = ~rating/2, showlegend = FALSE,
+           legendgroup = ~album, color = ~album,
+           text = ~str_glue("{track} ({rating})<br>{album}"),
+           opacity = 0.5, hoverinfo = 'text') %>% 
+       plotly::layout(
+           xaxis = list(title = NA, zeroline = FALSE),
+           yaxis = list(title = NA, zeroline = FALSE)
+       )
 })
 ```
 
-Year comparison
-======================
+# Year comparison
 
-Sidebar {.sidebar data-width=250}
------------------------------------------------------------------------
+## Sidebar {.sidebar data-width="250"}
 
 ```{r}
 shiny::radioButtons(inputId = "chooseYear", label = "Select year:",
@@ -294,8 +360,7 @@ actionButton(inputId = "refreshPlex", label = "Refresh Plex", icon = icon('refre
 actionButton(inputId = "refreshLastfm", label = "Refresh Lastfm", icon = icon("refresh"))
 ```
 
-Row 1 {data-height=50}
-----
+## Row 1 {data-height="50"}
 
 ### Rating Progress
 
@@ -308,7 +373,7 @@ renderPlot({
     mutate(label = ifelse(test = key == 'perc', 
                           yes = str_c(round(100*value, 0), "%"), no = "")) %>% 
     ggplot(aes(x = 1, y = value, fill = rev(key), alpha = rev(key))) + 
-    geom_col(position = 'fill', color = "#003EBB", size = 1) + 
+    geom_col(position = 'fill', color = "#003EBB") + 
     coord_flip() + 
     scale_fill_manual(values = (c("#C1D1F4", "#003EBB"))) + 
     scale_alpha_manual(values = c(0.5, 1)) + 
@@ -325,8 +390,7 @@ renderPlot({
 
 ```
 
-Row table
------------------------------------------------------------------------
+## Row table
 
 ### All albums
 
@@ -338,9 +402,8 @@ shiny::checkboxInput(inputId = "onlyComplete", label = "Only include complete ra
 DT::renderDataTable({
   data <- rv$plexYear %>% 
     filter(albumArtist != 'Various Artists') %>% 
+    complete_album_filter() %>%
     group_by(albumArtist, album) %>% 
-    ## Allow for an album to be missing 3 tracks before max trackNum
-    filter(n() >= max(trackNum) - 3) %>% 
     summarise(x = n(), y = sum(!is.na(rating)),
               avRat = round(mean(rating, na.rm = TRUE) / 2, 2),
               .groups = 'drop') %>% 
@@ -349,7 +412,7 @@ DT::renderDataTable({
     mutate(match = getSlugs(match)) %>% 
     left_join(., 
               # rv$lastfm %>% 
-              lastfm %>% 
+              rv$lastfm %>% 
                 unite(col = 'match', artist, album, sep = "-", remove = TRUE) %>% 
                 mutate(match = getSlugs(match)) %>% 
                 count(match, sort = T, name = 'Plays'),
@@ -371,8 +434,7 @@ DT::renderDataTable({
 
 ```
 
-Row table
------------------------------------------------------------------------
+## Row table
 
 ### Top Songs
 
@@ -385,7 +447,7 @@ DT::renderDataTable({
     mutate(match = getSlugs(match)) %>% 
     left_join(., 
               # rv$lastfm %>%
-              lastfm %>%
+              rv$lastfm %>%
                 unite(col = 'match', artist, track, sep = "-", remove = TRUE) %>% 
                 mutate(match = getSlugs(match)) %>% 
                 count(match, sort = T, name = 'Plays'),
@@ -400,8 +462,7 @@ DT::renderDataTable({
 
 ```
 
-Row {data-height=50}
------------------------------------------------------------------------
+## Row {data-height="50"}
 
 ### 
 
@@ -409,8 +470,7 @@ Row {data-height=50}
 shiny::checkboxInput(inputId = "onlyPlex", label = "Only include Plex", value = FALSE)
 ```
 
-Row {}
------------------------------------------------------------------------
+## Row
 
 ### Top Album Plays (Plex in blue)
 
@@ -586,43 +646,32 @@ renderPlot({
 })
 ```
 
-
-
-Row
------------------------------------------------------------------------
+## Row
 
 ### Ratings 1
 
 ```{r, eval = T}
 renderPlot({
   req(rv$plexYear)
-  colPal <- c('#FFFFFF', colorRampPalette(c("#C1D1F4", "#003EBB"))(10))
-  names(colPal) <- seq(from = 0, to = 5, by = 0.5)
-
+ 
   plotData <- rv$plexYear %>%
       select(albumArtist, album, track, trackNum, rating) %>% 
     # filter(albumArtist != 'Various Artists') %>% 
-    group_by(albumArtist, album) %>% 
-    filter({
-      max_track <- suppressWarnings(max(trackNum, na.rm = TRUE))
-      if (is.infinite(max_track)) TRUE else n() >= max_track - 3
-    }) %>% 
-    ungroup() %>% 
+    complete_album_filter() %>%
     mutate(album = ifelse(nchar(album) > 24,
                           str_c(str_sub(album, 0, 22), "..."),
                           album)) %>%
     mutate(rating0 = replace_na(rating, 0)) %>%
     group_by(albumArtist, album) %>% 
     mutate(avRat = mean(rating, na.rm = T), count = n()) %>% 
-    group_by(albumArtist, album, avRat, count) %>% 
+      filter(count > 2) %>% 
+    group_by(albumArtist, album, avRat) %>% 
     nest() %>%
     ungroup() %>%
     arrange(desc(avRat)) %>% 
-    filter(count > 2) %>% 
     slice(1:50) %>% 
-    unnest() %>% 
+    unnest(cols = c(data)) %>% 
     mutate(rating = rating0/2, avRat = avRat/2) %>% 
-      # mutate(rating = as.factor(rating)) %>% 
     mutate(title = album) %>% 
     arrange(title) %>% 
     mutate(title = forcats::fct_rev(title))
@@ -633,11 +682,13 @@ renderPlot({
       annotate("text", x = 0, y = 0, label = "No albums found for current year filter")
   } else {
     plotData %>%
-      ggplot(aes(x = trackNum, y = title,
-                 fill = rating, group = rating)) +
+      ggplot(aes(x = trackNum, y = title, fill = rating)) +
       geom_point(shape = 21, size = 6) +
-          scale_fill_continuous(palette = colPal,
-                                limits = c(0, 5)) +
+          scale_fill_gradient("",
+                low = "#FFFFFF",   # Your vibrant light blue
+                high = "#3c50b1",  # Your deep midnight blue
+                limits = c(0, 5),  # Ensures the scale is always 0 to 5
+                breaks = 0:5) +
       xlab(NULL) + ylab(NULL)
   }
 
@@ -645,15 +696,13 @@ renderPlot({
 
 ```
 
-
-
-
 ### Ratings 2
 
 ```{r}
 ## Trying a new plot
 renderPlot({
-  colPal <- c('#FFFFFF', colorRampPalette(c("#C1D1F4", "#003EBB"))(5))
+  colPal <- c('#FFFFFF', colorRampPalette(c("#B9E2FF", "#3c50b1"))(10))
+  names(colPal) <- seq(from = 0, to = 5, by = 0.5)
   
   treemapData <- rv$plexYear %>% 
       select(album, rating, track) %>% 
@@ -667,69 +716,24 @@ renderPlot({
       treemapify::geom_treemap() +
       treemapify::geom_treemap_subgroup_border(size = 5) +
       treemapify::geom_treemap_subgroup2_border(size = 0.5, color = 'light grey') +
-      treemapify::geom_treemap_subgroup_text(aes(label = album), 
-                                             place = 'center', alpha = 0.5, grow = T) +
-      scale_fill_manual("", values = colPal,
-                    limits = c(0, 1, 2, 3, 4, 5),
-                    labels = c(0, 1, 2, 3, 4, 5))
+      treemapify::geom_treemap_subgroup_text(place = 'center', alpha = 0.5, grow = T) +
+      scale_fill_manual(values = colPal, 
+                            breaks = c("0", "1", "2", "3", "4", "5"))
   treemap
 
     
 })
 ```
 
+# All albums
 
-```{r, eval = F}
-renderPlot({
-  colors <- c('#FFFFFF', '#6475C4', '#3B50B2')
-  rv$plexYear %>% 
-    group_by(albumArtist, album) %>% 
-  filter(n() >= max(trackNum) - 3) %>% 
-    purrr::when(
-      input$onlyComplete ~ filter(., !is.na(sum(rating))),
-      ~ .
-    ) %>%   
-    ungroup() %>% 
-    mutate(rating = ifelse(rating == 0, NA, rating)) %>% 
-    group_by(album) %>% 
-    mutate(y = n(), count = n()) %>% 
-    filter(count > 2) %>% 
-    na.omit() %>% 
-    mutate(x = n()) %>% 
-    group_by(album, x, y) %>% summarise(avRat = mean(rating) / 2, .groups = 'drop') %>% 
-    arrange(desc(avRat)) %>% 
-    slice(1:25) %>% 
-    arrange(avRat) %>% 
-    mutate(album = str_c(album, "\n", "(", round(avRat, 1), ")")) %>% 
-    mutate(album = forcats::fct_inorder(album)) %>% 
-    mutate(compRat = (x/y)*avRat) %>% 
-    select(-x, -y) %>% 
-    gather(-album, key = series, value = Rating) %>% 
-    ggplot(aes(x = album, y = Rating, group = series, fill = series)) +
-    geom_col(position = 'identity', color = colors[3], size = 0.5, width = 0.7) +
-    scale_fill_manual(values = c(colors[1], colors[2])) + 
-    coord_flip() +
-    labs(x = NULL, y = NULL) +
-    theme(legend.position = 'none')
-  
-  
-})
-
-
-```
-
-All albums
-======================
-
-Row {data-height=50}
------------------------------------------------------------------------
+## Row {data-height="50"}
 
 ```{r}
 shiny::checkboxInput(inputId = "complete2", label = "Only complete ratings", value = FALSE)
 ```
 
-Row {data-height=100}
------------------------------------------------------------------------
+## Row {data-height="100"}
 
 ### 
 
@@ -737,8 +741,7 @@ Row {data-height=100}
 shiny::textInput(inputId = 'filterText', label = 'Search', value = '', width = "100%")
 ```
 
-Row {}
------------------------------------------------------------------------
+## Row
 
 ### 
 
@@ -760,11 +763,7 @@ renderPlotly({
 
     plotData <- filteredData %>% 
         select(-filterText) %>% 
-        group_by(albumArtist, album) %>% 
-        filter({
-            max_track <- suppressWarnings(max(trackNum, na.rm = TRUE))
-            if (is.infinite(max_track)) TRUE else n() >= max_track - 3
-        }) %>% 
+      complete_album_filter() %>%
         purrr::when(
             input$complete2 ~ filter(., !is.na(sum(rating))),
             ~ .
@@ -830,8 +829,7 @@ plotly::plot_ly(plotData %>% filter(series == 'avRat'),
                      dtick = 1),
          showlegend = FALSE,
          barmode = 'overlay',
-         margin = list(l = margin_left),
-         height = plot_height)
+         margin = list(l = margin_left))
 
   # ggplot(aes(x = album, y = Rating, group = series, fill = series)) +
   # geom_col(position = 'identity', color = colors[3], size = 0.5, width = 0.7) +
@@ -841,4 +839,3 @@ plotly::plot_ly(plotData %>% filter(series == 'avRat'),
   # theme(legend.position = 'none')
 })
 ```
-
