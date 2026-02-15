@@ -1,8 +1,8 @@
 
-getwd()
-if (stringr::str_detect(getwd(), "shiny", negate = TRUE)) {
-  setwd('apps/lastfm-shiny')
-}
+# getwd()
+# if (stringr::str_detect(getwd(), "shiny", negate = TRUE)) {
+#   setwd('apps/lastfm-shiny')
+# }
 
 
 # Setup -------------------------------------------------------------------
@@ -292,7 +292,7 @@ ui <- material_page(
         )),
         material_row(
           material_column(material_card(
-            title = "", plotOutput('albumRatings')
+            title = "", plotlyOutput('albumRatings')
           )),
           material_column(material_card(
             title = "", plotlyOutput('albumRatings2', height = '100%')
@@ -658,7 +658,7 @@ server <- function(input, output, session) {
   
   # Plotly: Album Ratings --------------------------------------------------
   
-  output$albumRatings <- renderPlot(
+  output$albumRatings <- renderPlotly(
     if (str_to_lower(values$chooseArtist) %in% str_to_lower(plexDB$artist)) {
      
       colors <- c('#FFFFFF',
@@ -686,7 +686,7 @@ server <- function(input, output, session) {
         # mutate(avRat = ifelse(is.nan(avRat), 0, avRat)) %>%
         # mutate(album = forcats::fct_reorder(album, avRat))
 
-      ggplot(ratingsPlot, aes(x = trackIndex, y = album)) +
+      gg <- ggplot(ratingsPlot, aes(x = trackIndex, y = album)) +
         geom_point(
           aes(fill = rating),
           shape = 21,
@@ -707,6 +707,8 @@ server <- function(input, output, session) {
         ) +
         labs(x = NULL, y = NULL) +
         theme(legend.position = 'bottom')
+      
+      ggplotly(gg)
       
     }
   )
