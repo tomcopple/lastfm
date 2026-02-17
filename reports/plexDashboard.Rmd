@@ -30,12 +30,15 @@ source_project("R", "lib", "getPlex.R")
 
 getSlugs <- function(text) {
   text %>% 
+    as.character() %>%
     stringr::str_to_lower() %>% 
-    stringr::str_remove_all(pattern = "[[:punct:]]") %>% 
-    stringr::str_replace_all(pattern = "&", "and") %>% 
+    stringr::str_replace_all(pattern = "&", replacement = " and ") %>%
+    stringr::str_remove_all(pattern = "\\([^)]*\\d+[^)]*\\)") %>%
+    stringr::str_remove_all(pattern = "\\[[^]]*\\d+[^]]*\\]") %>%
+    stringr::str_replace_all(pattern = "\\bvol\\.?\\s+", replacement = "volume ") %>%
+    stringr::str_replace_all(pattern = "[[:punct:]]", replacement = " ") %>%
     stringr::str_replace_all(pattern = "\\s{2,}", replacement = " ") %>% 
     stringr::str_trim(side = "both") %>% 
-    stringr::str_remove_all(pattern = "\\s\\(.*") %>% 
     stringr::str_replace_all(pattern = " ", replacement = "-")
 }
 
@@ -82,6 +85,216 @@ complete_album_filter <- function(data) {
     dplyr::ungroup()
 }
 
+get_discogs_collection <- function(username = "tomcopple") {
+  discogs_token <- Sys.getenv("DISCOGS_TOKEN")
+
+  if (!nzchar(discogs_token)) {
+    return(tibble::tibble(match = character(), inDiscogs = logical()))
+  }
+
+  req <- tryCatch(
+    {
+      httr2::request(glue::glue("https://api.discogs.com/users/{username}/collection/folders/0/releases?per_page=500")) %>%
+        httr2::req_headers(Authorization = glue::glue("Discogs token={discogs_token}"))
+    },
+    error = function(e) NULL
+  )
+
+  if (is.null(req)) {
+    return(tibble::tibble(match = character(), inDiscogs = logical()))
+  }
+
+  releases <- tryCatch(
+    {
+      httr2::req_perform(req) %>%
+        httr2::resp_body_json() %>%
+        purrr::pluck("releases")
+    },
+    error = function(e) list()
+  )
+
+  if (length(releases) == 0) {
+    return(tibble::tibble(match = character(), inDiscogs = logical()))
+  }
+
+  purrr::map_dfr(releases, function(x) {
+    artist <- purrr::pluck(x, "basic_information", "artists", 1, "name", .default = NA_character_)
+    album <- purrr::pluck(x, "basic_information", "title", .default = NA_character_)
+    tibble::tibble(artist = artist, album = album)
+  }) %>%
+    dplyr::filter(!is.na(.data$artist), !is.na(.data$album)) %>%
+    dplyr::mutate(match = getSlugs(stringr::str_c(.data$artist, .data$album, sep = "-"))) %>%
+    dplyr::distinct(.data$artist, .data$album, .data$match) %>%
+    dplyr::mutate(inDiscogs = TRUE)
+}
+
+load_discogs_overrides <- function(path = NULL) {
+  empty_overrides <- tibble::tibble(
+    plexArtist = character(),
+    plexAlbum = character(),
+    discogsArtist = character(),
+    discogsAlbum = character(),
+    notes = character(),
+    plexMatch = character(),
+    discogsMatch = character()
+  )
+
+  tsv_path <- here::here("data", "raw", "discogs_overrides.tsv")
+  csv_path <- here::here("data", "raw", "discogs_overrides.csv")
+
+  if (is.null(path)) {
+    path <- dplyr::case_when(
+      file.exists(tsv_path) ~ tsv_path,
+      file.exists(csv_path) ~ csv_path,
+      TRUE ~ tsv_path
+    )
+  }
+
+  if (!file.exists(path)) {
+    return(empty_overrides)
+  }
+
+  overrides_raw <- tryCatch(
+    {
+      if (stringr::str_detect(path, "\\.tsv$")) {
+        readr::read_tsv(path, show_col_types = FALSE)
+      } else {
+        readr::read_csv(path, show_col_types = FALSE)
+      }
+    },
+    error = function(e) {
+      warning(paste0("Could not parse overrides file '", path, "': ", e$message))
+      empty_overrides
+    }
+  )
+
+  overrides_raw %>%
+    dplyr::mutate(dplyr::across(dplyr::everything(), as.character)) %>%
+    dplyr::filter(
+      !is.na(.data$plexArtist), .data$plexArtist != "",
+      !is.na(.data$plexAlbum), .data$plexAlbum != "",
+      !is.na(.data$discogsArtist), .data$discogsArtist != "",
+      !is.na(.data$discogsAlbum), .data$discogsAlbum != ""
+    ) %>%
+    dplyr::mutate(
+      plexMatch = getSlugs(stringr::str_c(.data$plexArtist, .data$plexAlbum, sep = "-")),
+      discogsMatch = getSlugs(stringr::str_c(.data$discogsArtist, .data$discogsAlbum, sep = "-"))
+    ) %>%
+    dplyr::distinct(.data$plexMatch, .keep_all = TRUE)
+}
+
+build_all_albums_data <- function(plex_data, lastfm_data, discogs_data, overrides_data = NULL) {
+  if (is.null(overrides_data)) {
+    overrides_data <- tibble::tibble(plexMatch = character(), discogsMatch = character(), notes = character())
+  }
+
+  plex_summary <- plex_data %>%
+    dplyr::filter(.data$albumArtist != "Various Artists") %>%
+    complete_album_filter() %>%
+    dplyr::group_by(.data$albumArtist, .data$album) %>%
+    dplyr::summarise(
+      ratedTracks = sum(!is.na(.data$rating)),
+      totalTracks = dplyr::n(),
+      avRat = round(mean(.data$rating, na.rm = TRUE) / 2, 2),
+      .groups = "drop"
+    ) %>%
+    dplyr::mutate(avRat = dplyr::if_else(is.nan(.data$avRat), NA_real_, .data$avRat))
+
+  lastfm_summary <- lastfm_data %>%
+    dplyr::group_by(.data$artist, .data$album) %>%
+    dplyr::summarise(Plays = dplyr::n(), .groups = "drop") %>%
+    dplyr::rename(albumArtist = .data$artist)
+
+  plex_summary %>%
+    dplyr::mutate(plexMatch = getSlugs(stringr::str_c(.data$albumArtist, .data$album, sep = "-"))) %>%
+    dplyr::left_join(
+      overrides_data %>% dplyr::select(.data$plexMatch, .data$discogsMatch) %>% dplyr::distinct(),
+      by = "plexMatch"
+    ) %>%
+    dplyr::mutate(
+      match = dplyr::coalesce(.data$discogsMatch, .data$plexMatch),
+      overrideApplied = !is.na(.data$discogsMatch)
+    ) %>%
+    dplyr::left_join(
+      lastfm_summary %>%
+        dplyr::mutate(plexMatch = getSlugs(stringr::str_c(.data$albumArtist, .data$album, sep = "-"))) %>%
+        dplyr::select(.data$plexMatch, .data$Plays),
+      by = "plexMatch"
+    ) %>%
+    dplyr::left_join(
+      discogs_data %>% dplyr::select(.data$match, .data$inDiscogs) %>% dplyr::distinct(),
+      by = "match"
+    ) %>%
+    dplyr::mutate(
+      Plays = tidyr::replace_na(.data$Plays, 0),
+      inDiscogs = tidyr::replace_na(.data$inDiscogs, FALSE),
+      n = stringr::str_c(.data$ratedTracks, .data$totalTracks, sep = "/")
+    ) %>%
+    dplyr::select(.data$albumArtist, .data$album, .data$n, .data$avRat, .data$Plays, .data$inDiscogs, .data$overrideApplied) %>%
+    dplyr::arrange(dplyr::desc(.data$avRat), dplyr::desc(.data$Plays))
+}
+
+build_discogs_debug_data <- function(plex_data, discogs_data, overrides_data = NULL) {
+  if (is.null(overrides_data)) {
+    overrides_data <- tibble::tibble(plexMatch = character(), discogsMatch = character(), notes = character())
+  }
+
+  if (!all(c("artist", "album", "match") %in% names(discogs_data))) {
+    return(tibble::tibble(
+      albumArtist = character(),
+      album = character(),
+      plexSlug = character(),
+      discogsCandidates = character(),
+      discogsCandidateSlugs = character(),
+      candidateCount = integer()
+    ))
+  }
+
+  plex_albums <- plex_data %>%
+    dplyr::filter(.data$albumArtist != "Various Artists") %>%
+    complete_album_filter() %>%
+    dplyr::group_by(.data$albumArtist, .data$album) %>%
+    dplyr::summarise(totalTracks = dplyr::n(), .groups = "drop") %>%
+    dplyr::mutate(
+      match = getSlugs(stringr::str_c(.data$albumArtist, .data$album, sep = "-")),
+      artistSlug = getSlugs(.data$albumArtist)
+    )
+
+  discogs_albums <- discogs_data %>%
+    dplyr::distinct(.data$artist, .data$album, .data$match) %>%
+    dplyr::mutate(
+      artistSlug = getSlugs(.data$artist),
+      candidate = stringr::str_c(.data$artist, " - ", .data$album),
+      candidateSlug = .data$match
+    )
+
+  unmatched_plex <- plex_albums %>%
+    dplyr::anti_join(discogs_albums %>% dplyr::distinct(.data$match), by = "match")
+
+  if (nrow(overrides_data) > 0) {
+    unmatched_plex <- unmatched_plex %>%
+      dplyr::anti_join(overrides_data %>% dplyr::select(.data$plexMatch) %>% dplyr::distinct(),
+                       by = c("match" = "plexMatch"))
+  }
+
+  unmatched_plex %>%
+    dplyr::left_join(
+      discogs_albums %>%
+        dplyr::select(.data$artistSlug, .data$candidate, .data$candidateSlug) %>%
+        dplyr::distinct(),
+      by = "artistSlug"
+    ) %>%
+    dplyr::filter(!is.na(.data$candidate)) %>%
+    dplyr::group_by(.data$albumArtist, .data$album, plexSlug = .data$match) %>%
+    dplyr::summarise(
+      candidateCount = dplyr::n_distinct(.data$candidate),
+      discogsCandidates = stringr::str_c(head(sort(unique(.data$candidate)), 5), collapse = " | "),
+      discogsCandidateSlugs = stringr::str_c(head(sort(unique(.data$candidateSlug)), 5), collapse = " | "),
+      .groups = "drop"
+    ) %>%
+    dplyr::arrange(dplyr::desc(.data$candidateCount), .data$albumArtist, .data$album)
+}
+
 # Use functions -----
 removeEve <- function(lastfm) {
   lastfm <- lastfm %>% 
@@ -104,6 +317,8 @@ removeEve <- function(lastfm) {
 
 plex <- getPlex(F)
 lastfm <- getLastfm(F) %>% removeEve()
+discogs <- get_discogs_collection()
+discogs_overrides <- load_discogs_overrides()
 
 
 ```
@@ -111,8 +326,18 @@ lastfm <- getLastfm(F) %>% removeEve()
 ```{r}
 rv <- reactiveValues(plex = plex,
                      lastfm = lastfm,
+                     discogs = discogs,
+                     discogsOverrides = discogs_overrides,
                      chooseYear = 3000,
                      plexYear = plex)
+
+allAlbumsCombined <- reactive({
+  build_all_albums_data(rv$plex, rv$lastfm, rv$discogs, rv$discogsOverrides)
+})
+
+discogsDebugCombined <- reactive({
+  build_discogs_debug_data(rv$plex, rv$discogs, rv$discogsOverrides)
+})
 
 observeEvent(eventExpr = input$refreshPlex,
              handlerExpr = {
@@ -134,6 +359,15 @@ observeEvent(eventExpr = input$refreshLastfm,
                showNotification("Updating Lastfm")
                rv$lastfm <- getLastfm(T) %>% removeEve()
                showNotification("Lastfm Updated!", type = 'message')
+             })
+
+observeEvent(eventExpr = input$reloadDiscogsOverrides,
+             handlerExpr = {
+               rv$discogsOverrides <- load_discogs_overrides()
+               showNotification(
+                 paste0("Discogs overrides reloaded (", nrow(rv$discogsOverrides), " rows)."),
+                 type = 'message'
+               )
              })
 
 observeEvent(eventExpr = input$chooseYear,
@@ -189,7 +423,7 @@ renderPlot({
 
 ```
 
-## Row
+## Row {data-height=1200}
 
 ### Artist Albums
 
@@ -198,8 +432,8 @@ DT::renderDataTable({
   req(input$compareArtist)
 
   artistAlbums <- rv$plex %>%
-      filter(albumArtist == 'The Flaming Lips') %>% 
-    # filter(albumArtist == input$compareArtist) %>%
+      # filter(albumArtist == 'The Flaming Lips') %>% 
+    filter(albumArtist == input$compareArtist) %>%
     complete_album_filter() %>%
     group_by(album) %>%
     summarise(
@@ -727,115 +961,254 @@ renderPlot({
 
 # All albums
 
-## Row {data-height="50"}
+## Album Sidebar {.sidebar data-width="300"}
 
 ```{r}
-shiny::checkboxInput(inputId = "complete2", label = "Only complete ratings", value = FALSE)
+shiny::radioButtons(
+  inputId = "allAlbumsView",
+  label = "View",
+  choices = c("Chart" = "chart", "Data table" = "table"),
+  selected = "chart",
+  inline = TRUE
+)
+
+shiny::conditionalPanel(
+  condition = "input.allAlbumsView == 'chart'",
+  shiny::checkboxInput(inputId = "complete2", label = "Only complete ratings", value = FALSE),
+  shiny::textInput(inputId = 'filterText', label = 'Search', value = '', width = "100%")
+)
+
+shiny::conditionalPanel(
+  condition = "input.allAlbumsView == 'table'",
+  shiny::numericInput(inputId = "minPlays", label = "Minimum Last.fm plays", value = 0, min = 0, step = 1),
+  shiny::sliderInput(inputId = "ratingRange", label = "Average Plex rating", min = 0, max = 5, value = c(0, 5), step = 0.1),
+  shiny::selectInput(
+    inputId = "discogsFilter",
+    label = "Discogs collection",
+    choices = c("All albums" = "all", "In collection" = "in", "Not in collection" = "out"),
+    selected = "all"
+  )
+)
 ```
 
-## Row {data-height="100"}
-
-### 
+## Row 
 
 ```{r}
-shiny::textInput(inputId = 'filterText', label = 'Search', value = '', width = "100%")
+output$allAlbumsMain <- shiny::renderUI({
+  chart_height_px <- 1200
+
+  if (input$allAlbumsView == "chart") {
+    searchText <- if (is.null(input$filterText)) "" else input$filterText
+    searchPattern <- getSlugs(searchText)
+
+    filteredData <- rv$plex %>%
+      unite(albumArtist, album, col = 'filterText', sep = " ", remove = FALSE) %>%
+      mutate(filterText = getSlugs(filterText))
+
+    if (nzchar(searchPattern)) {
+      filteredData <- filteredData %>%
+        filter(str_detect(string = filterText, pattern = searchPattern))
+    }
+
+    albumData <- filteredData %>%
+      select(-filterText) %>%
+      complete_album_filter() %>%
+      ungroup()
+
+    if (isTRUE(input$complete2)) {
+      albumData <- albumData %>%
+        group_by(albumArtist, album) %>%
+        filter(all(!is.na(rating)), n() >= 3) %>%
+        ungroup()
+    }
+
+    album_count <- albumData %>%
+      mutate(rating = ifelse(rating == 0, NA, rating)) %>%
+      group_by(album) %>%
+      mutate(count = n()) %>%
+      filter(count > 2) %>%
+      na.omit() %>%
+      ungroup() %>%
+      summarise(n = dplyr::n_distinct(album)) %>%
+      dplyr::pull(n) %>%
+      dplyr::first()
+
+    if (is.na(album_count) || album_count < 1) {
+      album_count <- 1
+    }
+
+    chart_height_px <- min(18000, max(800, album_count * 18))
+  }
+
+  if (input$allAlbumsView == "chart") {
+    plotly::plotlyOutput("allAlbumsChart", width = "100%")
+  } else {
+    shiny::tags$div(
+      style = "height: 82vh; overflow-y: auto;",
+      DT::DTOutput("allAlbumsTable")
+    )
+  }
+})
+
+shiny::uiOutput("allAlbumsMain")
 ```
 
-## Row
+```{r}
+output$allAlbumsChart <- renderPlotly({
+  colors <- c('#FFFFFF', '#6475C4', '#3B50B2')
+  plot_width_px <- session$clientData$output_allAlbumsChart_width
 
-### 
+  if (is.null(plot_width_px) || !is.finite(plot_width_px) || plot_width_px < 300) {
+    plot_width_px <- 1050
+  }
 
-```{r fig.height=96}
-
-renderPlotly({
-    colors <- c('#FFFFFF', '#6475C4', '#3B50B2')
   searchText <- if (is.null(input$filterText)) "" else input$filterText
   searchPattern <- getSlugs(searchText)
 
-    filteredData <- rv$plex %>% 
-        unite(albumArtist, album, col = 'filterText', sep = " ", remove = FALSE) %>% 
-        mutate(filterText = getSlugs(filterText))
+  filteredData <- rv$plex %>%
+    unite(albumArtist, album, col = 'filterText', sep = " ", remove = FALSE) %>%
+    mutate(filterText = getSlugs(filterText))
 
   if (nzchar(searchPattern)) {
     filteredData <- filteredData %>%
       filter(str_detect(string = filterText, pattern = searchPattern))
   }
 
-    plotData <- filteredData %>% 
-        select(-filterText) %>% 
-      complete_album_filter() %>%
-        purrr::when(
-            input$complete2 ~ filter(., !is.na(sum(rating))),
-            ~ .
-        ) %>%
-        ungroup() %>% 
-        mutate(rating = ifelse(rating == 0, NA, rating)) %>% 
-        group_by(album) %>% 
-        mutate(y = n(), count = n()) %>% 
-        filter(count > 2) %>% 
-        na.omit() %>% 
-        mutate(x = n()) %>% 
-        group_by(albumArtist, album, x, y) %>% summarise(avRat = mean(rating) / 2, .groups = 'drop') %>% 
-        # slice(1:25) %>% 
-        arrange(avRat) %>% 
-        mutate(album = str_c(album, " (", round(avRat, 2), ")")) %>% 
-        mutate(album = forcats::fct_inorder(album)) %>% 
-        mutate(compRat = (x/y)*avRat) %>% 
-        select(-x, -y) %>% 
-        gather(-album, -albumArtist, key = series, value = Rating)
+  albumData <- filteredData %>%
+    select(-filterText) %>%
+    complete_album_filter() %>%
+    ungroup()
 
-if (nrow(plotData) == 0) {
-  return(
-    plotly::plot_ly() %>%
-      layout(
-        title = "No albums found for current filter",
-        xaxis = list(visible = FALSE),
-        yaxis = list(visible = FALSE)
-      )
+  if (isTRUE(input$complete2)) {
+    albumData <- albumData %>%
+      group_by(albumArtist, album) %>%
+      filter(all(!is.na(rating)), n() > 3) %>%
+      ungroup()
+  }
+
+  plotData <- albumData %>%
+    mutate(rating = ifelse(rating == 0, NA, rating)) %>%
+    group_by(album) %>%
+    mutate(y = n(), count = n()) %>%
+    filter(count > 2) %>%
+    na.omit() %>%
+    mutate(x = n()) %>%
+    group_by(albumArtist, album, x, y) %>% summarise(avRat = mean(rating) / 2, .groups = 'drop') %>%
+    arrange(avRat) %>%
+    mutate(album = str_c(album, " (", round(avRat, 2), ")")) %>%
+    mutate(album = ifelse(nchar(album) > 60, str_c(str_sub(album, 1, 60), "..."), album)) %>%
+    mutate(album = forcats::fct_inorder(album)) %>%
+    mutate(compRat = (x / y) * avRat) %>%
+    select(-x, -y) %>%
+    gather(-album, -albumArtist, key = series, value = Rating)
+
+  if (nrow(plotData) == 0) {
+    return(
+      plotly::plot_ly() %>%
+        layout(
+          title = "No albums found for current filter",
+          xaxis = list(visible = FALSE),
+          yaxis = list(visible = FALSE)
+        )
+    )
+  }
+
+  album_count <- plotData %>%
+    filter(series == 'avRat') %>%
+    summarise(n = dplyr::n_distinct(album)) %>%
+    pull(n)
+
+  if (is.na(album_count) || album_count < 1) {
+    album_count <- 1
+  }
+
+  y_tick_size <- dplyr::case_when(
+    album_count > 600 ~ 8,
+    album_count > 250 ~ 9,
+    album_count > 100 ~ 10,
+    TRUE ~ 12
   )
-}
 
-album_count <- plotData %>%
-  filter(series == 'avRat') %>%
-  summarise(n = dplyr::n_distinct(album)) %>%
-  pull(n)
+  chart_height_px <- min(18000, max(800, album_count * 18))
 
-if (is.na(album_count) || album_count < 1) {
-  album_count <- 1
-}
+  margin_left <- 160
 
-y_tick_size <- dplyr::case_when(
-  album_count > 600 ~ 8,
-  album_count > 250 ~ 9,
-  album_count > 100 ~ 10,
-  TRUE ~ 12
+  plotly::plot_ly(
+    plotData %>% filter(series == 'avRat'),
+    x = ~Rating, y = ~album, type = 'bar', orientation = 'h',
+    text = ~str_c(albumArtist, ": ", album), hoverinfo = 'text',
+    marker = list(color = colors[1], line = list(color = colors[2], width = 0.2))
+  ) %>%
+    add_trace(
+      data = plotData %>% filter(series == 'compRat'),
+      marker = list(color = colors[2]), hoverinfo = 'none'
+    ) %>%
+    layout(
+      autosize = TRUE,
+      width = plot_width_px,
+      height = chart_height_px,
+      xaxis = list(title = ""),
+      yaxis = list(title = "", tickfont = list(size = y_tick_size), dtick = 1, automargin = TRUE),
+      showlegend = FALSE,
+      barmode = 'overlay',
+      margin = list(l = margin_left)
+    )
+})
+
+output$allAlbumsTable <- DT::renderDataTable({
+  data <- allAlbumsCombined() %>%
+    dplyr::filter(.data$Plays >= input$minPlays) %>%
+    dplyr::filter(.data$avRat >= input$ratingRange[1], .data$avRat <= input$ratingRange[2])
+
+  if (input$discogsFilter == "in") {
+    data <- data %>% dplyr::filter(.data$inDiscogs)
+  } else if (input$discogsFilter == "out") {
+    data <- data %>% dplyr::filter(!.data$inDiscogs)
+  }
+
+  DT::datatable(
+    data,
+    filter = "top",
+    options = list(
+      pageLength = 30,
+      scrollY = "68vh",
+      scrollCollapse = TRUE
+    )
+  )
+})
+
+output$discogsDebugTable <- DT::renderDataTable({
+  debug_data <- discogsDebugCombined()
+
+  DT::datatable(
+    debug_data,
+    filter = "top",
+    options = list(
+      pageLength = 25,
+      scrollX = TRUE,
+      scrollY = "78vh",
+      scrollCollapse = TRUE
+    )
+  )
+})
+```
+
+# Discogs debug
+
+## Controls {.sidebar}
+
+```{r}
+shiny::actionButton(
+  inputId = "reloadDiscogsOverrides",
+  label = "Reload overrides",
+  icon = icon("refresh")
 )
 
-plot_height <- min(12000, max(350, album_count * 22))
+shiny::helpText("Reloads data/raw/discogs_overrides.tsv (or .csv fallback) without restarting the dashboard.")
+```
 
-margin_left <- 4 * max(nchar(as.character(plotData$album)), na.rm = TRUE)
-margin_left <- ifelse(is.finite(margin_left), margin_left, 120)
+## Row {data-height = "1200"}
 
-plotly::plot_ly(plotData %>% filter(series == 'avRat'), 
-                x = ~Rating, y = ~album, type = 'bar', orientation = 'h',
-                text = ~str_c(albumArtist, ": ", album), hoverinfo = 'text',
-                marker = list(color = colors[1], 
-                              line = list(color = colors[2], width = 0.2))) %>% 
-  add_trace(data = plotData %>% filter(series == 'compRat'),
-            marker = list(color = colors[2]), hoverinfo = 'none') %>% 
-  layout(xaxis= list(title = ""),
-         yaxis = list(title = "",
-                     tickfont = list(size = y_tick_size),
-                     dtick = 1),
-         showlegend = FALSE,
-         barmode = 'overlay',
-         margin = list(l = margin_left))
-
-  # ggplot(aes(x = album, y = Rating, group = series, fill = series)) +
-  # geom_col(position = 'identity', color = colors[3], size = 0.5, width = 0.7) +
-  # scale_fill_manual(values = c(colors[1], colors[2])) + 
-  # coord_flip() +
-  # labs(x = NULL, y = NULL) +
-  # theme(legend.position = 'none')
-})
+```{r}
+DT::DTOutput("discogsDebugTable", height = "80vh")
 ```

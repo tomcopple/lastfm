@@ -1,0 +1,21 @@
+.git
+.gitignore
+.Rproj.user
+**/.DS_Store
+
+# Local/exported data and caches not needed to build runtime image
+data/archive
+data/cache
+data/exports
+tempData
+reports/*_cache
+apps/lastfm-shiny/rsconnect
+
+# Secrets and local env files
+**/*.rds
+**/.env
+deploy/synology/.env
+
+# Build artifacts
+*.tar
+*.tar.gz
