@@ -32,6 +32,8 @@ getSlugs <- function(text) {
   text %>% 
     as.character() %>%
     stringr::str_to_lower() %>% 
+        stringr::str_replace_all(pattern = "^james yorkston.*", replacement = "james yorkston") %>% 
+        stringr::str_replace_all(pattern = "song book$", replacement = "songbook") %>% 
     stringr::str_replace_all(pattern = "&", replacement = " and ") %>%
     stringr::str_remove_all(pattern = "\\([^)]*\\d+[^)]*\\)") %>%
     stringr::str_remove_all(pattern = "\\[[^]]*\\d+[^]]*\\]") %>%
@@ -227,14 +229,14 @@ build_all_albums_data <- function(plex_data, lastfm_data, discogs_data, override
     ) %>%
     dplyr::mutate(
       Plays = tidyr::replace_na(.data$Plays, 0),
-      inDiscogs = tidyr::replace_na(.data$inDiscogs, FALSE),
+      inDiscogs = tidyr::replace_na(.data$inDiscogs, FALSE) | .data$overrideApplied,
       n = stringr::str_c(.data$ratedTracks, .data$totalTracks, sep = "/")
     ) %>%
-    dplyr::select(.data$albumArtist, .data$album, .data$n, .data$avRat, .data$Plays, .data$inDiscogs, .data$overrideApplied) %>%
+    dplyr::select(.data$albumArtist, .data$album, .data$n, .data$avRat, .data$Plays, .data$inDiscogs) %>%
     dplyr::arrange(dplyr::desc(.data$avRat), dplyr::desc(.data$Plays))
 }
 
-build_discogs_debug_data <- function(plex_data, discogs_data, overrides_data = NULL) {
+build_discogs_debug_data <- function(plex_data, lastfm_data, discogs_data, overrides_data = NULL) {
   if (is.null(overrides_data)) {
     overrides_data <- tibble::tibble(plexMatch = character(), discogsMatch = character(), notes = character())
   }
@@ -243,6 +245,9 @@ build_discogs_debug_data <- function(plex_data, discogs_data, overrides_data = N
     return(tibble::tibble(
       albumArtist = character(),
       album = character(),
+      Plays = integer(),
+      trackCount = integer(),
+      avRat = numeric(),
       plexSlug = character(),
       discogsCandidates = character(),
       discogsCandidateSlugs = character(),
@@ -254,11 +259,22 @@ build_discogs_debug_data <- function(plex_data, discogs_data, overrides_data = N
     dplyr::filter(.data$albumArtist != "Various Artists") %>%
     complete_album_filter() %>%
     dplyr::group_by(.data$albumArtist, .data$album) %>%
-    dplyr::summarise(totalTracks = dplyr::n(), .groups = "drop") %>%
+    dplyr::summarise(
+      trackCount = dplyr::n(),
+      avRat = round(mean(.data$rating, na.rm = TRUE) / 2, 2),
+      .groups = "drop"
+    ) %>%
+    dplyr::mutate(avRat = dplyr::if_else(is.nan(.data$avRat), NA_real_, .data$avRat)) %>%
     dplyr::mutate(
       match = getSlugs(stringr::str_c(.data$albumArtist, .data$album, sep = "-")),
       artistSlug = getSlugs(.data$albumArtist)
     )
+
+  lastfm_albums <- lastfm_data %>%
+    dplyr::group_by(.data$artist, .data$album) %>%
+    dplyr::summarise(Plays = dplyr::n(), .groups = "drop") %>%
+    dplyr::mutate(match = getSlugs(stringr::str_c(.data$artist, .data$album, sep = "-"))) %>%
+    dplyr::select(.data$match, .data$Plays)
 
   discogs_albums <- discogs_data %>%
     dplyr::distinct(.data$artist, .data$album, .data$match) %>%
@@ -278,6 +294,8 @@ build_discogs_debug_data <- function(plex_data, discogs_data, overrides_data = N
   }
 
   unmatched_plex %>%
+    dplyr::left_join(lastfm_albums, by = "match") %>%
+    dplyr::mutate(Plays = tidyr::replace_na(.data$Plays, 0L)) %>%
     dplyr::left_join(
       discogs_albums %>%
         dplyr::select(.data$artistSlug, .data$candidate, .data$candidateSlug) %>%
@@ -285,14 +303,69 @@ build_discogs_debug_data <- function(plex_data, discogs_data, overrides_data = N
       by = "artistSlug"
     ) %>%
     dplyr::filter(!is.na(.data$candidate)) %>%
-    dplyr::group_by(.data$albumArtist, .data$album, plexSlug = .data$match) %>%
+    dplyr::group_by(.data$albumArtist, .data$album, .data$Plays, .data$trackCount, .data$avRat, plexSlug = .data$match) %>%
     dplyr::summarise(
       candidateCount = dplyr::n_distinct(.data$candidate),
       discogsCandidates = stringr::str_c(head(sort(unique(.data$candidate)), 5), collapse = " | "),
       discogsCandidateSlugs = stringr::str_c(head(sort(unique(.data$candidateSlug)), 5), collapse = " | "),
       .groups = "drop"
     ) %>%
-    dplyr::arrange(dplyr::desc(.data$candidateCount), .data$albumArtist, .data$album)
+    dplyr::arrange(dplyr::desc(.data$Plays), dplyr::desc(.data$avRat), dplyr::desc(.data$trackCount), dplyr::desc(.data$candidateCount), .data$albumArtist, .data$album)
+}
+
+build_discogs_not_in_plex_data <- function(plex_data, lastfm_data, discogs_data, overrides_data = NULL) {
+  if (is.null(overrides_data)) {
+    overrides_data <- tibble::tibble(plexMatch = character(), discogsMatch = character(), notes = character())
+  }
+
+  if (!all(c("artist", "album", "match") %in% names(discogs_data))) {
+    return(tibble::tibble(artist = character(), album = character(), Plays = integer(), match = character()))
+  }
+
+  plex_matches <- plex_data %>%
+    dplyr::filter(.data$albumArtist != "Various Artists") %>%
+    complete_album_filter() %>%
+    dplyr::group_by(.data$albumArtist, .data$album) %>%
+    dplyr::summarise(.groups = "drop") %>%
+    dplyr::mutate(plexMatch = getSlugs(stringr::str_c(.data$albumArtist, .data$album, sep = "-"))) %>%
+    dplyr::left_join(
+      overrides_data %>% dplyr::select(.data$plexMatch, .data$discogsMatch) %>% dplyr::distinct(),
+      by = "plexMatch"
+    ) %>%
+    dplyr::mutate(match = dplyr::coalesce(.data$discogsMatch, .data$plexMatch)) %>%
+    dplyr::select(.data$match) %>%
+    dplyr::distinct()
+
+  lastfm_album_plays <- lastfm_data %>%
+    dplyr::group_by(.data$artist, .data$album) %>%
+    dplyr::summarise(Plays = dplyr::n(), .groups = "drop") %>%
+    dplyr::mutate(match = getSlugs(stringr::str_c(.data$artist, .data$album, sep = "-"))) %>%
+    dplyr::select(.data$match, .data$Plays)
+
+  discogs_data %>%
+    dplyr::distinct(.data$artist, .data$album, .data$match) %>%
+    dplyr::anti_join(plex_matches, by = "match") %>%
+    dplyr::left_join(lastfm_album_plays, by = "match") %>%
+    dplyr::mutate(Plays = tidyr::replace_na(.data$Plays, 0L)) %>%
+    dplyr::arrange(dplyr::desc(.data$Plays), .data$artist, .data$album)
+}
+
+build_lastfm_not_in_plex_data <- function(plex_data, lastfm_data) {
+  plex_matches <- plex_data %>%
+    dplyr::filter(.data$albumArtist != "Various Artists") %>%
+    complete_album_filter() %>%
+    dplyr::group_by(.data$albumArtist, .data$album) %>%
+    dplyr::summarise(.groups = "drop") %>%
+    dplyr::mutate(match = getSlugs(stringr::str_c(.data$albumArtist, .data$album, sep = "-"))) %>%
+    dplyr::select(.data$match) %>%
+    dplyr::distinct()
+
+  lastfm_data %>%
+    dplyr::group_by(.data$artist, .data$album) %>%
+    dplyr::summarise(Plays = dplyr::n(), .groups = "drop") %>%
+    dplyr::mutate(match = getSlugs(stringr::str_c(.data$artist, .data$album, sep = "-"))) %>%
+    dplyr::anti_join(plex_matches, by = "match") %>%
+    dplyr::arrange(dplyr::desc(.data$Plays), .data$artist, .data$album)
 }
 
 # Use functions -----
@@ -336,7 +409,15 @@ allAlbumsCombined <- reactive({
 })
 
 discogsDebugCombined <- reactive({
-  build_discogs_debug_data(rv$plex, rv$discogs, rv$discogsOverrides)
+  build_discogs_debug_data(rv$plex, rv$lastfm, rv$discogs, rv$discogsOverrides)
+})
+
+discogsNotInPlexCombined <- reactive({
+  build_discogs_not_in_plex_data(rv$plex, rv$lastfm, rv$discogs, rv$discogsOverrides)
+})
+
+lastfmNotInPlexCombined <- reactive({
+  build_lastfm_not_in_plex_data(rv$plex, rv$lastfm)
 })
 
 observeEvent(eventExpr = input$refreshPlex,
@@ -447,12 +528,16 @@ DT::renderDataTable({
       year = ifelse(is.infinite(year), NA, year),
       avRat = ifelse(is.nan(avRat), NA, avRat)
     ) %>%
+      mutate(albumSlug = getSlugs(album)) %>% 
     left_join(
-      # rv$lastfm %>%filter(artist == input$compareArtist) %>%
-          lastfm %>% filter(artist == 'The Flaming Lips') %>% 
-        count(album, name = "Plays"),
-      by = "album"
+      rv$lastfm %>% mutate(artist = getSlugs(artist),
+                           albumSlug = getSlugs(album)) %>% 
+          filter(artist == getSlugs(input$compareArtist)) %>%
+          # lastfm %>% filter(artist == 'The Flaming Lips') %>% 
+        count(albumSlug, name = "Plays"),
+      by = "albumSlug", 
     ) %>%
+      select(-albumSlug) %>% 
     mutate(Plays = replace_na(Plays, 0)) %>%
     unite(col = 'n', rated, total, sep = "/") %>%
     arrange(desc(avRat), desc(Plays))
@@ -980,6 +1065,8 @@ shiny::conditionalPanel(
 
 shiny::conditionalPanel(
   condition = "input.allAlbumsView == 'table'",
+  shiny::checkboxInput(inputId = "tableOnlyComplete", label = "Only completely rated albums", value = FALSE),
+  shiny::numericInput(inputId = "minTracks", label = "Minimum number of tracks", value = 1, min = 1, step = 1),
   shiny::numericInput(inputId = "minPlays", label = "Minimum Last.fm plays", value = 0, min = 0, step = 1),
   shiny::sliderInput(inputId = "ratingRange", label = "Average Plex rating", min = 0, max = 5, value = c(0, 5), step = 0.1),
   shiny::selectInput(
@@ -1157,14 +1244,22 @@ output$allAlbumsChart <- renderPlotly({
 
 output$allAlbumsTable <- DT::renderDataTable({
   data <- allAlbumsCombined() %>%
+    tidyr::separate(col = .data$n, into = c("ratedTracks", "totalTracks"), sep = "/", convert = TRUE, remove = FALSE) %>%
+    dplyr::filter(.data$totalTracks >= input$minTracks) %>%
     dplyr::filter(.data$Plays >= input$minPlays) %>%
     dplyr::filter(.data$avRat >= input$ratingRange[1], .data$avRat <= input$ratingRange[2])
+
+  if (isTRUE(input$tableOnlyComplete)) {
+    data <- data %>% dplyr::filter(.data$ratedTracks == .data$totalTracks)
+  }
 
   if (input$discogsFilter == "in") {
     data <- data %>% dplyr::filter(.data$inDiscogs)
   } else if (input$discogsFilter == "out") {
     data <- data %>% dplyr::filter(!.data$inDiscogs)
   }
+
+  data <- data %>% dplyr::select(-.data$ratedTracks, -.data$totalTracks)
 
   DT::datatable(
     data,
@@ -1191,6 +1286,36 @@ output$discogsDebugTable <- DT::renderDataTable({
     )
   )
 })
+
+output$discogsNotInPlexTable <- DT::renderDataTable({
+  data <- discogsNotInPlexCombined()
+
+  DT::datatable(
+    data,
+    filter = "top",
+    options = list(
+      pageLength = 25,
+      scrollX = TRUE,
+      scrollY = "85vh",
+      scrollCollapse = TRUE
+    )
+  )
+})
+
+output$lastfmNotInPlexTable <- DT::renderDataTable({
+  data <- lastfmNotInPlexCombined()
+
+  DT::datatable(
+    data,
+    filter = "top",
+    options = list(
+      pageLength = 25,
+      scrollX = TRUE,
+      scrollY = "85vh",
+      scrollCollapse = TRUE
+    )
+  )
+})
 ```
 
 # Discogs debug
@@ -1211,4 +1336,20 @@ shiny::helpText("Reloads data/raw/discogs_overrides.tsv (or .csv fallback) witho
 
 ```{r}
 DT::DTOutput("discogsDebugTable", height = "80vh")
+```
+
+# Missing in Plex
+
+## Row {data-height = "1200"}
+
+### Discogs collection not in Plex 
+
+```{r}
+DT::DTOutput("discogsNotInPlexTable", height = "88vh")
+```
+
+### Most-played Last.fm albums not in Plex 
+
+```{r}
+DT::DTOutput("lastfmNotInPlexTable", height = "88vh")
 ```
