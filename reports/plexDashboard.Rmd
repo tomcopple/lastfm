@@ -368,6 +368,79 @@ build_lastfm_not_in_plex_data <- function(plex_data, lastfm_data) {
     dplyr::arrange(dplyr::desc(.data$Plays), .data$artist, .data$album)
 }
 
+load_missing_major_works <- function(path = NULL) {
+  if (is.null(path)) {
+    path <- here::here("data", "exports", "missingMajorWorks.csv")
+  }
+
+  empty_data <- tibble::tibble(
+    rank = integer(),
+    recommendation_type = character(),
+    artist = character(),
+    album = character(),
+    album_scrobbles = integer(),
+    artist_scrobbles = integer(),
+    owned_albums = integer(),
+    avg_owned_rating = numeric(),
+    major_score = numeric(),
+    rationale = character(),
+    join_key = character()
+  )
+
+  if (!file.exists(path)) {
+    return(empty_data)
+  }
+
+  tryCatch(
+    {
+      readr::read_csv(path, show_col_types = FALSE)
+    },
+    error = function(e) {
+      warning(paste0("Could not load missing major works file '", path, "': ", e$message))
+      empty_data
+    }
+  )
+}
+
+build_missing_major_works_with_discogs <- function(recommendations_data, discogs_data, overrides_data = NULL) {
+  if (nrow(recommendations_data) == 0) {
+    return(recommendations_data %>% dplyr::mutate(inDiscogs = logical()))
+  }
+
+  if (is.null(overrides_data)) {
+    overrides_data <- tibble::tibble(plexMatch = character(), discogsMatch = character(), notes = character())
+  }
+
+  discogs_matches <- discogs_data %>%
+    dplyr::select(.data$match) %>%
+    dplyr::distinct() %>%
+    dplyr::filter(!is.na(.data$match), .data$match != "")
+
+  valid_overrides <- overrides_data %>%
+    dplyr::select(.data$plexMatch, .data$discogsMatch) %>%
+    dplyr::distinct() %>%
+    dplyr::filter(!is.na(.data$plexMatch), .data$plexMatch != "", !is.na(.data$discogsMatch), .data$discogsMatch != "")
+
+  recommendations_with_match <- recommendations_data %>%
+    dplyr::mutate(recMatch = getSlugs(stringr::str_c(.data$artist, .data$album, sep = "-")))
+
+  direct_match <- recommendations_with_match %>%
+    dplyr::left_join(discogs_matches %>% dplyr::mutate(inDiscogsDirect = TRUE), by = c("recMatch" = "match"))
+
+  override_match <- recommendations_with_match %>%
+    dplyr::left_join(valid_overrides, by = c("recMatch" = "plexMatch")) %>%
+    dplyr::inner_join(discogs_matches, by = c("discogsMatch" = "match")) %>%
+    dplyr::transmute(.data$recMatch, inDiscogsOverride = TRUE) %>%
+    dplyr::distinct(.data$recMatch, .keep_all = TRUE)
+
+  direct_match %>%
+    dplyr::left_join(override_match, by = "recMatch") %>%
+    dplyr::mutate(
+      inDiscogs = tidyr::replace_na(.data$inDiscogsDirect, FALSE) | tidyr::replace_na(.data$inDiscogsOverride, FALSE)
+    ) %>%
+    dplyr::select(-.data$recMatch, -.data$inDiscogsDirect, -.data$inDiscogsOverride)
+}
+
 # Use functions -----
 removeEve <- function(lastfm) {
   lastfm <- lastfm %>% 
@@ -418,6 +491,14 @@ discogsNotInPlexCombined <- reactive({
 
 lastfmNotInPlexCombined <- reactive({
   build_lastfm_not_in_plex_data(rv$plex, rv$lastfm)
+})
+
+missingMajorWorksCombined <- reactive({
+  load_missing_major_works()
+})
+
+missingMajorWorksDiscogsCombined <- reactive({
+  build_missing_major_works_with_discogs(missingMajorWorksCombined(), rv$discogs, rv$discogsOverrides)
 })
 
 observeEvent(eventExpr = input$refreshPlex,
@@ -1060,6 +1141,7 @@ shiny::radioButtons(
 shiny::conditionalPanel(
   condition = "input.allAlbumsView == 'chart'",
   shiny::checkboxInput(inputId = "complete2", label = "Only complete ratings", value = FALSE),
+  shiny::checkboxInput(inputId = "highlightDiscogsAlbums", label = "Highlight Discogs collection", value = FALSE),
   shiny::textInput(inputId = 'filterText', label = 'Search', value = '', width = "100%")
 )
 
@@ -1142,7 +1224,7 @@ shiny::uiOutput("allAlbumsMain")
 
 ```{r}
 output$allAlbumsChart <- renderPlotly({
-  colors <- c('#FFFFFF', '#6475C4', '#3B50B2')
+  colors <- c('#FFFFFF', '#6475C4', '#FF4FA3')
   plot_width_px <- session$clientData$output_allAlbumsChart_width
 
   if (is.null(plot_width_px) || !is.finite(plot_width_px) || plot_width_px < 300) {
@@ -1173,6 +1255,10 @@ output$allAlbumsChart <- renderPlotly({
       ungroup()
   }
 
+  discogs_lookup <- allAlbumsCombined() %>%
+    dplyr::select(.data$albumArtist, .data$album, .data$inDiscogs) %>%
+    dplyr::distinct()
+
   plotData <- albumData %>%
     mutate(rating = ifelse(rating == 0, NA, rating)) %>%
     group_by(album) %>%
@@ -1181,13 +1267,15 @@ output$allAlbumsChart <- renderPlotly({
     na.omit() %>%
     mutate(x = n()) %>%
     group_by(albumArtist, album, x, y) %>% summarise(avRat = mean(rating) / 2, .groups = 'drop') %>%
+    dplyr::left_join(discogs_lookup, by = c("albumArtist", "album")) %>%
+    dplyr::mutate(inDiscogs = tidyr::replace_na(.data$inDiscogs, FALSE)) %>%
     arrange(avRat) %>%
     mutate(album = str_c(album, " (", round(avRat, 2), ")")) %>%
     mutate(album = ifelse(nchar(album) > 60, str_c(str_sub(album, 1, 60), "..."), album)) %>%
     mutate(album = forcats::fct_inorder(album)) %>%
     mutate(compRat = (x / y) * avRat) %>%
     select(-x, -y) %>%
-    gather(-album, -albumArtist, key = series, value = Rating)
+    gather(-album, -albumArtist, -inDiscogs, key = series, value = Rating)
 
   if (nrow(plotData) == 0) {
     return(
@@ -1219,16 +1307,65 @@ output$allAlbumsChart <- renderPlotly({
   chart_height_px <- min(18000, max(800, album_count * 18))
 
   margin_left <- 160
+  compRat_opacity <- if (isTRUE(input$highlightDiscogsAlbums)) 0.45 else 1
 
-  plotly::plot_ly(
-    plotData %>% filter(series == 'avRat'),
-    x = ~Rating, y = ~album, type = 'bar', orientation = 'h',
-    text = ~str_c(albumArtist, ": ", album), hoverinfo = 'text',
-    marker = list(color = colors[1], line = list(color = colors[2], width = 0.2))
-  ) %>%
+  avRatData <- plotData %>%
+    dplyr::filter(series == 'avRat') %>%
+    dplyr::mutate(
+      discogsStatus = dplyr::if_else(.data$inDiscogs, "In Discogs", "Not in Discogs")
+    )
+
+  chart <- plotly::plot_ly()
+
+  if (isTRUE(input$highlightDiscogsAlbums)) {
+    chart <- chart %>%
+      add_trace(
+        data = avRatData %>% dplyr::filter(!.data$inDiscogs),
+        x = ~Rating,
+        y = ~album,
+        type = 'bar',
+        orientation = 'h',
+        text = ~str_c(albumArtist, ": ", album, "<br>", discogsStatus),
+        hoverinfo = 'text',
+        marker = list(color = colors[1], line = list(color = colors[2], width = 0.2)),
+        inherit = FALSE
+      ) %>%
+      add_trace(
+        data = avRatData %>% dplyr::filter(.data$inDiscogs),
+        x = ~Rating,
+        y = ~album,
+        type = 'bar',
+        orientation = 'h',
+        text = ~str_c(albumArtist, ": ", album, "<br>", discogsStatus),
+        hoverinfo = 'text',
+        marker = list(color = colors[3], line = list(color = colors[2], width = 0.2)),
+        inherit = FALSE
+      )
+  } else {
+    chart <- chart %>%
+      add_trace(
+        data = avRatData,
+        x = ~Rating,
+        y = ~album,
+        type = 'bar',
+        orientation = 'h',
+        text = ~str_c(albumArtist, ": ", album, "<br>", discogsStatus),
+        hoverinfo = 'text',
+        marker = list(color = colors[1], line = list(color = colors[2], width = 0.2)),
+        inherit = FALSE
+      )
+  }
+
+  chart %>%
     add_trace(
       data = plotData %>% filter(series == 'compRat'),
-      marker = list(color = colors[2]), hoverinfo = 'none'
+      x = ~Rating,
+      y = ~album,
+      type = 'bar',
+      orientation = 'h',
+      marker = list(color = colors[2], opacity = compRat_opacity),
+      hoverinfo = 'none',
+      inherit = FALSE
     ) %>%
     layout(
       autosize = TRUE,
@@ -1316,6 +1453,60 @@ output$lastfmNotInPlexTable <- DT::renderDataTable({
     )
   )
 })
+
+output$missingMajorWorksTable <- DT::renderDataTable({
+  row_limit <- if (is.null(input$missingMajorWorksN)) 20 else as.numeric(input$missingMajorWorksN)
+  recommendation_filter <- if (is.null(input$missingMajorWorksType)) "all" else input$missingMajorWorksType
+  discogs_filter <- if (is.null(input$missingMajorWorksDiscogsFilter)) "out" else input$missingMajorWorksDiscogsFilter
+
+  data <- missingMajorWorksDiscogsCombined() %>%
+    dplyr::arrange(.data$rank)
+
+  if (recommendation_filter == "owned") {
+    data <- data %>% dplyr::filter(.data$recommendation_type == "missing_by_owned_artist")
+  } else if (recommendation_filter == "new") {
+    data <- data %>% dplyr::filter(.data$recommendation_type == "new_artist_you_already_listen_to")
+  }
+
+  if (discogs_filter == "out") {
+    data <- data %>% dplyr::filter(!.data$inDiscogs)
+  } else if (discogs_filter == "in") {
+    data <- data %>% dplyr::filter(.data$inDiscogs)
+  }
+
+  data <- data %>%
+    dplyr::slice_head(n = row_limit) %>%
+    dplyr::mutate(
+      recommendation_type = stringr::str_replace_all(.data$recommendation_type, "_", " "),
+      recommendation_type = stringr::str_to_sentence(.data$recommendation_type),
+      major_score = round(.data$major_score, 2),
+      avg_owned_rating = round(.data$avg_owned_rating, 2),
+      inDiscogs = dplyr::if_else(.data$inDiscogs, "Yes", "No")
+    ) %>%
+    dplyr::select(
+      .data$rank,
+      .data$recommendation_type,
+      .data$artist,
+      .data$album,
+      .data$inDiscogs,
+      .data$album_scrobbles,
+      .data$artist_scrobbles,
+      .data$owned_albums,
+      .data$avg_owned_rating,
+      .data$major_score,
+      .data$rationale
+    )
+
+  DT::datatable(
+    data,
+    options = list(
+      pageLength = 20,
+      scrollX = TRUE,
+      scrollY = "85vh",
+      scrollCollapse = TRUE
+    )
+  )
+})
 ```
 
 # Discogs debug
@@ -1352,4 +1543,48 @@ DT::DTOutput("discogsNotInPlexTable", height = "88vh")
 
 ```{r}
 DT::DTOutput("lastfmNotInPlexTable", height = "88vh")
+```
+
+# Missing Major Works
+
+## Controls {.sidebar}
+
+```{r}
+shiny::radioButtons(
+  inputId = "missingMajorWorksN",
+  label = "Rows",
+  choices = c("Top 20" = 20, "Top 50" = 50),
+  selected = 20,
+  inline = TRUE
+)
+
+shiny::radioButtons(
+  inputId = "missingMajorWorksType",
+  label = "Recommendation type",
+  choices = c(
+    "All" = "all",
+    "Owned-artist only" = "owned",
+    "New artist suggestions" = "new"
+  ),
+  selected = "all"
+)
+
+shiny::radioButtons(
+  inputId = "missingMajorWorksDiscogsFilter",
+  label = "Discogs collection",
+  choices = c(
+    "Not in collection" = "out",
+    "All" = "all",
+    "In collection" = "in"
+  ),
+  selected = "out"
+)
+```
+
+## Row {data-height = "1200"}
+
+### Recommendations
+
+```{r}
+DT::DTOutput("missingMajorWorksTable", height = "88vh")
 ```
