@@ -23,7 +23,7 @@ getPlexRatings <- function(refresh = FALSE, printTree = FALSE) {
                 mutate(rating = replace_na(rating, 0),
                        album = replace_na(album, "Unknown"),
                        track = replace_na(track, "Unknown"),
-                       rating = round(rating / 2),
+                       rating = floor(rating / 2),
                        n = 1) %>% 
                 mutate(rating = forcats::as_factor(rating))  
             
