@@ -1,126 +1,135 @@
-# Backup script if you need to restore all scrobbles for some reason
+# Backup/restore script: fetches full Last.fm history and merges it
 
-library(tidyverse);library(lubridate);library(jsonlite);library(httr2);library(here)
+library(tidyverse)
+library(lubridate)
+library(httr2)
+library(here)
+library(glue)
+library(dropboxr)
 
-# Get credentials from 
-user <- Sys.getenv('LASTFM_USER')
-api <- Sys.getenv('LASTFM_APIKEY')
+user <- Sys.getenv("LASTFM_USER")
+api  <- Sys.getenv("LASTFM_APIKEY")
 
-# Set lastfm base url
-baseurl <- paste0(
-    "http://ws.audioscrobbler.com/2.0/?method=user.getrecenttracks&user=", user,
-    "&api_key=", api, "&format=json&limit=200&page="
-)
+# Set to NULL to download full history
+# stopDate <- ymd("2023-01-01")
+stopDate <- NULL
+use_stop_date <- !is.null(stopDate)
+dropbox_tracks_path <- "/R/lastfm/tracks.csv"
+base_url <- "http://ws.audioscrobbler.com/2.0/"
 
-## Can also tell function to stop once it hits a certain date
-stopDate <- lubridate::ymd("2023-01-01")
+if (user == "" || api == "") stop("LASTFM_USER or LASTFM_APIKEY not set")
 
-## Find out how many responses in total
-res1 <- httr2::request(glue::glue("http://ws.audioscrobbler.com/2.0/?method=user.getinfo&user={user}&api_key={api}&format=json"))
-resp1 <- httr2::req_perform(res1)
+get_playcount <- function(user, api) {
+    req <- request(base_url) %>%
+        req_url_query(method = "user.getinfo", user = user, api_key = api, format = "json")
 
-howMany <- resp1 %>% 
-    httr2::resp_body_json() %>% 
-    pluck('user', 'playcount') %>% 
-    as.numeric()
+    resp <- tryCatch(req_perform(req), error = function(e) {
+        stop(glue("Error fetching user info: {e$message}"))
+    })
 
-# Initiate data frame
-restore <- data.frame(    )
-
-# So how many pages to get? Get 200 per page, so 
-# Get 200 per page and need ~120,000 responses, so ~600 pages in total?
-# Find the highest page?
-
-
-
-pages <- ceiling(howMany/200)
-i <- 1
-keepgoing = TRUE
-
-
-
-## NB If it crashes, check i then start again including that number
-
-while (keepgoing) {
-    url <- str_c(baseurl, i)
-    
-    print (glue::glue("This may take a while, don't panic... [{i}/{pages}]"))
-    
-    ## send httr GET request and format response
-    res1 <- httr2::request(url) %>% 
-        req_retry(max_tries = 3, backoff = ~30)
-    resp1 <- httr2::req_perform(res1) 
-    
-    tracksRaw <- resp1 %>% 
-        httr2::resp_body_string() %>% 
-        jsonlite::fromJSON(simplifyDataFrame = T, flatten = T) %>% 
-        pluck('recenttracks', 'track')
-    
-    tracksDF <- tracksRaw %>% 
-        select(track = name, artist = `artist.#text`, album = `album.#text`,
-               dateRaw = `date.#text`) %>% 
-        mutate(date = parse_date_time(dateRaw, "d b Y, H:M"), .keep = 'unused') %>% 
-        filter(!is.na(date)) %>% 
-        as_tibble()
-    
-    restore <- bind_rows(restore, tracksDF) %>% 
-        arrange(desc(date))
-    
-    i <- i + 1
-    
-    if( i > pages) {
-        keepgoing <- FALSE
+    if (resp_status(resp) >= 400) {
+        body <- tryCatch(resp_body_string(resp), error = function(e) "<unreadable>")
+        stop(glue("Failed to get user info (HTTP {resp_status(resp)}): {body}"))
     }
-    
-    if(min(restore$date) <= stopDate) {
-        keepgoing <- FALSE
-    }
-    
+
+    json <- resp_body_json(resp, simplifyVector = TRUE)
+    as.numeric(purrr::pluck(json, "user", "playcount", .default = 0))
 }
 
-## Remove duplicates (i.e. same track in same minute)
-restoreFinal <- as_tibble(restore) %>% 
-    filter(date >= stopDate) %>% 
-    distinct()
+fetch_page_tracks <- function(page, user, api) {
+    req <- request(base_url) %>%
+        req_url_query(
+            method = "user.getrecenttracks",
+            user = user,
+            api_key = api,
+            format = "json",
+            limit = 200,
+            page = page
+        ) %>%
+        req_retry(max_tries = 3)
 
-## Import current lastfm data
-source(here::here("R", "bootstrap.R"))
-source_project("R", "lib", "getLastfm.R")
-lastfm <- getLastfm(F)
+    resp <- tryCatch(req_perform(req), error = function(e) {
+        message(glue("Request failed for page {page}: {e$message}"))
+        return(NULL)
+    })
 
-## And replace with new data
-newLastfm <- filter(lastfm, date < min(restoreFinal$date)) %>% 
-    bind_rows(restoreFinal) %>%
-    arrange(date) %>% 
-    distinct()
+    if (is.null(resp)) return(tibble())
+    if (resp_status(resp) >= 400) {
+        body <- tryCatch(resp_body_string(resp), error = function(e) "<unreadable>")
+        message(glue("Skipping page {page} (HTTP {resp_status(resp)}): {body}"))
+        return(tibble())
+    }
 
-## Save and upload a backup copy and the master copy
-write.csv(newLastfm, file = here::here('tempData', str_c(today(), '-restoreLastfm.csv')), 
-          row.names = FALSE, fileEncoding = "UTF-8")
-write.csv(newLastfm, file = here::here('data', 'exports', 'tracks.csv'), 
-          row.names = FALSE, fileEncoding = "UTF-8")
+    parsed <- tryCatch(resp_body_json(resp, simplifyVector = TRUE), error = function(e) NULL)
+    if (is.null(parsed)) return(tibble())
 
-## Upload to Dropbox ---- 
-dropboxClient <- oauth_client(
-    id = Sys.getenv('DROPBOX_KEY'),
-    secret = Sys.getenv('DROPBOX_SECRET'),
-    token_url = "https://api.dropboxapi.com/oauth2/token",
-    name = 'Rstudio_TC'
+    tracks_raw <- purrr::pluck(parsed, "recenttracks", "track", .default = list())
+    if (length(tracks_raw) == 0) return(tibble())
+
+    as_tibble(tracks_raw) %>%
+        transmute(
+            track = name,
+            artist = artist$`#text`,
+            album = album$`#text`,
+            date = parse_date_time(date$`#text`, orders = c("d b Y, H:M", "Y-m-d H:M:S"))
+        ) %>%
+        filter(!is.na(date))
+}
+
+playcount <- get_playcount(user, api)
+pages <- if (playcount > 0) ceiling(playcount / 200) else 0
+if (pages == 0) stop("No tracks found or failed to determine playcount")
+
+message(glue("Fetching {playcount} plays across {pages} pages"))
+
+results <- list()
+for (i in seq_len(pages)) {
+    message(glue("Fetching page {i}/{pages}"))
+    page_tracks <- fetch_page_tracks(i, user, api)
+    results[[length(results) + 1]] <- page_tracks
+
+    if (use_stop_date && nrow(page_tracks) > 0 && min(page_tracks$date, na.rm = TRUE) <= stopDate) {
+        message("Reached stop date; stopping early.")
+        break
+    }
+}
+
+restoreFinal <- bind_rows(results) %>%
+    arrange(desc(date))
+
+if (use_stop_date) {
+    restoreFinal <- restoreFinal %>% filter(date >= stopDate)
+}
+
+restoreFinal <- restoreFinal %>% distinct()
+
+if (nrow(restoreFinal) == 0) stop("No restored tracks to merge")
+
+# Dropbox download/upload via dropboxr package
+dropboxr::dropbox_auth()
+
+lastfm <- tryCatch(
+    dropboxr::download_dropbox_file(dropbox_tracks_path) %>%
+        mutate(date = ymd_hms(date, quiet = TRUE)) %>%
+        filter(!is.na(date)),
+    error = function(e) stop(glue("Failed to download {dropbox_tracks_path}: {e$message}"))
 )
-dropboxToken <- readRDS(here::here('.secrets', 'dropbox_token.rds'))
 
-reqUpload <- request('https://content.dropboxapi.com/2/files/upload/') %>% 
-    req_oauth_refresh(client = dropboxClient, 
-                      refresh_token = dropboxToken$refresh_token) %>% 
-    req_headers('Content-Type' = 'application/octet-stream') %>% 
-    req_headers(
-        'Dropbox-API-Arg' = str_c('{',
-                                  '"autorename":false,',
-                                  '"mode":"overwrite",',
-                                  '"path":"/R/lastfm/tracks.csv",',
-                                  '"strict_conflict":false', 
-                                  '}')
-    ) %>% 
-    req_body_file(path = here::here('data', 'exports', 'tracks.csv'))
+newLastfm <- lastfm %>%
+    filter(date < min(restoreFinal$date)) %>%
+    bind_rows(restoreFinal) %>%
+    arrange(date) %>%
+    distinct()
 
-respUpload <- req_perform(reqUpload)
+dir.create(here::here("tempData"), recursive = TRUE, showWarnings = FALSE)
+dir.create(here::here("data", "exports"), recursive = TRUE, showWarnings = FALSE)
+
+write_csv(newLastfm, here::here("tempData", str_c(today(), "-restoreLastfm.csv")))
+write_csv(newLastfm, here::here("data", "exports", "tracks.csv"))
+
+tryCatch(
+    dropboxr::upload_df_to_dropbox(newLastfm, dropbox_path = dropbox_tracks_path,mode = 'overwrite'),
+    error = function(e) stop(glue("Dropbox upload failed: {e$message}"))
+)
+
+message("Restore complete and uploaded to Dropbox.")
