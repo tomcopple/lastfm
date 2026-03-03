@@ -503,7 +503,58 @@ removeEve <- function(lastfm) {
     )
 }
 
-plex <- getPlex(F)
+empty_plex <- function() {
+  tibble::tibble(
+    albumArtist = character(),
+    artist = character(),
+    album = character(),
+    track = character(),
+    rating = numeric(),
+    key = character(),
+    artistKey = character(),
+    albumKey = character(),
+    trackNum = numeric(),
+    discNum = numeric(),
+    year = numeric(),
+    duration = numeric()
+  )
+}
+
+safe_getPlex <- function(refresh = FALSE) {
+  tryCatch(
+    {
+      data <- getPlex(refresh)
+      if (is.null(data) || !is.data.frame(data)) {
+        warning("getPlex() returned non-tabular data; using empty Plex dataset")
+        return(empty_plex())
+      }
+      tibble::as_tibble(data)
+    },
+    error = function(e) {
+      warning(paste0("Could not load Plex from Dropbox/API: ", e$message))
+
+      fallback_path <- here::here("data", "exports", "plexDB.csv")
+      if (file.exists(fallback_path)) {
+        fallback <- tryCatch(
+          readr::read_csv(fallback_path, show_col_types = FALSE),
+          error = function(read_err) {
+            warning(paste0("Could not load local fallback plexDB.csv: ", read_err$message))
+            NULL
+          }
+        )
+
+        if (!is.null(fallback) && is.data.frame(fallback)) {
+          message("Using local fallback Plex data from data/exports/plexDB.csv")
+          return(tibble::as_tibble(fallback))
+        }
+      }
+
+      empty_plex()
+    }
+  )
+}
+
+plex <- safe_getPlex(F)
 lastfm <- getLastfm(F) %>% removeEve()
 discogs <- get_discogs_collection()
 discogs_overrides <- load_discogs_overrides()
@@ -545,7 +596,7 @@ missingDiscogsAICombined <- reactive({
 observeEvent(eventExpr = input$refreshPlex,
              handlerExpr = {
                showNotification("Updating Plex...")
-               rv$plex <- getPlex(T)
+               rv$plex <- safe_getPlex(T)
                set_year_state(rv, rv$plex, input$chooseYear)
                shiny::updateSelectizeInput(
                  session,
@@ -628,12 +679,14 @@ observeEvent(eventExpr = input$refreshMissingDiscogsAI,
 ## Artists Sidebar {.sidebar data-width="300"}
 
 ```{r}
+initial_artist_choices <- artist_choices(plex)
+
 shiny::radioButtons(
   inputId = "compareArtist",
   label = "Select artist",
-  choices = artist_choices(plex),
+  choices = initial_artist_choices,
   # options = list(placeholder = "Choose an artist"),
-  selected = artist_choices(plex) %>% sample(1)
+  selected = if (length(initial_artist_choices) > 0) initial_artist_choices[[1]] else character(0)
 )
 ```
 
@@ -821,23 +874,44 @@ renderPlotly({
 ## Sidebar {.sidebar data-width="250"}
 
 ```{r}
+year_values <- if (nrow(plex) > 0) {
+  max_year <- suppressWarnings(max(plex %>% dplyr::filter(!is.na(year)) %>% dplyr::pull(year), na.rm = TRUE))
+  if (is.finite(max_year) && max_year >= 2000) {
+    as.character(2000:max_year)
+  } else {
+    character(0)
+  }
+} else {
+  character(0)
+}
+
+year_choice_names <- if (nrow(plex) > 0) {
+  plex %>%
+    dplyr::filter(year >= 1950, albumArtist != 'Various Artists') %>%
+    dplyr::mutate(choiceLabel = ifelse(
+      year > 1999, year, 10 * floor(year / 10)
+    )) %>%
+    dplyr::distinct(albumArtist, album, choiceLabel) %>%
+    dplyr::count(choiceLabel) %>%
+    dplyr::arrange(choiceLabel) %>%
+    dplyr::mutate(n = stringr::str_c("(", n, ")")) %>%
+    tidyr::unite(choiceLabel, n, col = 'choiceLabel', sep = " ") %>%
+    dplyr::pull(choiceLabel)
+} else {
+  character(0)
+}
+
+selected_year <- if (nrow(plex) > 0 && any(!is.na(plex$year))) {
+  suppressWarnings(max(plex$year, na.rm = TRUE))
+} else {
+  "All"
+}
+
 shiny::radioButtons(inputId = "chooseYear", label = "Select year:",
-            choiceValues = c("All", '1950', '1960', '1970', '1980', '1990', 
-    ## This used to be plex %>% na.omit %>% pull(year), can't remember why.
-    c(2000:max(plex %>% filter(!is.na(year)) %>% pull(year)))), 
+            choiceValues = c("All", '1950', '1960', '1970', '1980', '1990', year_values), 
             choiceNames = c("All time", 
-                            plex %>%
-              filter(year >= 1950, albumArtist != 'Various Artists') %>% 
-              mutate(choiceLabel = ifelse(
-                year > 1999, year, 10*floor(year/10)
-              )) %>% 
-              distinct(albumArtist, album, choiceLabel) %>% 
-              count(choiceLabel) %>% 
-              arrange(choiceLabel) %>% 
-              mutate(n = str_c("(", n, ")")) %>% 
-              unite(choiceLabel, n, col = 'choiceLabel', sep = " ") %>% 
-              pull(choiceLabel)),
-              selected = max(plex$year, na.rm = TRUE)
+                            year_choice_names),
+              selected = selected_year
 )
 
 actionButton(inputId = "refreshPlex", label = "Refresh Plex", icon = icon('refresh'))
