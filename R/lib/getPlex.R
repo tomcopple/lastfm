@@ -7,7 +7,7 @@ getPlex <- function(refresh = FALSE) {
     
     
     if (refresh) {
-        plexToken <- "8fx9FuiVxoZ6Pzvjtngg"
+        plexToken <- "3xoCFZgHrHei_db42j2T"
         
         plexRaw <- request("http://192.168.1.202:32400/library/sections/3/search?type=10") %>% 
             req_headers(`X-Plex-Token` = plexToken) %>% 

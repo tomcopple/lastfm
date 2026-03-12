@@ -28,7 +28,7 @@ dups <- plex %>%
     select(artist, albumArtist, album, track, rating, key, newRat) %>% 
     arrange(artist)
 
-token <- '2CdDkLKF5xY27xxuxHB5'
+token <- '3xoCFZgHrHei_db42j2T'
 
 ## Copy this from restorePlexRatings.R
 

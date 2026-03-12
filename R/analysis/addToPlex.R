@@ -6,7 +6,7 @@ source(here::here("R", "bootstrap.R"))
 source_project("R", "lib", "getPlex.R")
 source_project("R", "lib", "getLastfm.R")
 
-token <- 'o8xPSiPMQtky4cxEtdKW'
+token <- '3xoCFZgHrHei_db42j2T'
 
 identity <- content(httr::GET(url = "http://192.168.1.202:32400/identity")) %>% 
     magrittr::extract2('MediaContainer') %>% 

@@ -2,7 +2,7 @@
 
 library(tidyverse);library(httr);library(lubridate);library(treemapify)
 
-token <- '2CdDkLKF5xY27xxuxHB5'
+token <- '3xoCFZgHrHei_db42j2T'
 
 slug <- "http://192.168.1.99:32400/playlists/108695/items"
 

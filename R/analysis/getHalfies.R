@@ -7,7 +7,7 @@ source_project("R", "lib", "getPlex.R")
 halfies <- getPlex(T) %>% 
     filter(rating %% 2 == 1)
 
-token <- '2CdDkLKF5xY27xxuxHB5'
+token <- '3xoCFZgHrHei_db42j2T'
 
 identity <- content(httr::GET(url = "http://192.168.1.99:32400/identity")) %>% 
     magrittr::extract2('MediaContainer') %>% 

@@ -10,7 +10,7 @@ library(tidyverse);library(httr)
 restoreRatings <- read_csv(file.path('tempData', 'restoreRatings.csv'))
 
 ## Load Plex library and get key identifiers for rated tracks
-token <- 'ABhPTJsJFC1CsCPKzzhb'
+token <- '3xoCFZgHrHei_db42j2T'
 
 ## Don't bother with artist, just keep album artist as easier?
 allTracks <- content(GET("http://192.168.1.99:32400/library/sections/3/search?type=10", 
