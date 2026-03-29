@@ -8,8 +8,9 @@ getSlugs <- function(text) {
         ## Remove any accents, cedillas etc (need to do this before lower case)
         iconv(from = 'UTF-8', to = "ASCII//TRANSLIT") %>% 
         str_to_lower() %>% 
+        str_remove(pattern = "(?<=james yorkston).*") %>% 
+        str_replace_all(pattern = "\\&", "and") %>% 
         str_remove_all(pattern = "[[:punct:]]") %>% 
-        str_replace_all(pattern = "&", "and") %>% 
         str_replace_all(pattern = "\\s{2,}", replacement = " ") %>% 
         ## Remove anything in brackets e.g. (remastered) etc
         str_remove_all(pattern = "\\s\\(.*") %>% 
