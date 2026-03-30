@@ -2,7 +2,9 @@
 
 getPlexRatings <- function(refresh = FALSE, printTree = FALSE) {
     
-    library(tidyverse);library(httr);library(lubridate);library(treemapify);library(dropboxr)
+    suppressMessages({
+            library(tidyverse);library(httr);library(lubridate);library(treemapify);library(dropboxr)
+    })
     
     source(here::here("R", "bootstrap.R"))
     source_project("R", "lib", "getPlex.R")
