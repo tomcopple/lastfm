@@ -18,3 +18,5 @@ lastfm.Rproj
 *.httr-oauth
 *.Rproj
 data
+!data/raw/
+!data/raw/discogs_overrides.tsv

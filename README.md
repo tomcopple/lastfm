@@ -92,3 +92,32 @@ Rscript -e 'setwd("apps/lastfm-shiny"); shiny::runApp()'
 
 - Dropbox-backed files used by app workflows include `/R/lastfm/tracks.csv` and `/R/lastfm/plexDB.csv`.
 - Root/project path helpers are in `R/bootstrap.R`.
+
+## Discogs overrides
+
+The dashboard and analysis scripts can apply manual matching overrides between Plex and Discogs albums.
+
+- Primary file: `data/raw/discogs_overrides.tsv`
+- Fallback file: `data/raw/discogs_overrides.csv` (used only if TSV is missing)
+
+Expected columns:
+
+- `plexArtist`
+- `plexAlbum`
+- `discogsArtist`
+- `discogsAlbum`
+- `notes` (optional free text)
+
+Update workflow:
+
+1. Edit `data/raw/discogs_overrides.tsv` and add one row per override mapping.
+2. Keep artist/album names as plain text; matching slugs are generated automatically by the dashboard/script loaders.
+3. In the Plex dashboard, open the "Discogs debug" section and click "Reload overrides".
+4. Re-run any analysis script that consumes overrides (for example `R/analysis/2026-02-missingMajorWorks.R`) if you want exported outputs refreshed.
+
+Example row:
+
+```tsv
+plexArtist	plexAlbum	discogsArtist	discogsAlbum	notes
+Smog	A River Ain't Too Much to Love	Bill Callahan	A River Ain't Too Much to Love	Artist name changed on Discogs
+```
