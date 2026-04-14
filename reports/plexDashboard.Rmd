@@ -634,10 +634,11 @@ observeEvent(eventExpr = input$refreshMissingDiscogsAI,
                note_id <- shiny::showNotification("Refreshing Missing from Discogs (AI) suggestions...", duration = NULL)
 
                script_path <- here::here("R", "analysis", "2026-02-missingMajorWorks.R")
+               rscript_bin <- file.path(R.home("bin"), "Rscript")
 
                run_result <- tryCatch(
                  {
-                   system2("Rscript", script_path, stdout = TRUE, stderr = TRUE)
+                   system2(rscript_bin, script_path, stdout = TRUE, stderr = TRUE)
                  },
                  error = function(e) e
                )
@@ -649,6 +650,22 @@ observeEvent(eventExpr = input$refreshMissingDiscogsAI,
                    paste0("Failed to refresh AI suggestions: ", run_result$message),
                    type = "error",
                    duration = 10
+                 )
+                 return(invisible(NULL))
+               }
+
+               run_status <- attr(run_result, "status")
+               if (!is.null(run_status) && !identical(run_status, 0L)) {
+                 error_text <- if (length(run_result) > 0) {
+                   stringr::str_c(tail(run_result, 8), collapse = "\n")
+                 } else {
+                   paste0("Rscript exited with status ", run_status)
+                 }
+
+                 shiny::showNotification(
+                   paste0("Failed to refresh AI suggestions. ", error_text),
+                   type = "error",
+                   duration = NULL
                  )
                  return(invisible(NULL))
                }

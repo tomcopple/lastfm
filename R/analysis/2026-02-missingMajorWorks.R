@@ -5,6 +5,8 @@
 ## data/exports/missingDiscogsAISuggestions.csv
 
 source(here::here("R", "bootstrap.R"))
+source_project("R", "lib", "getLastfm.R")
+source_project("R", "lib", "getPlex.R")
 
 library(tidyverse)
 library(here)
@@ -79,6 +81,7 @@ load_overrides <- function(path = here("data", "raw", "discogs_overrides.tsv")) 
 
 call_openai_for_recommendations <- function(existing_collection_data, max_suggestions = 100) {
     debug_path <- here("data", "exports", "missingDiscogsOpenAIDebug.json")
+    dir.create(dirname(debug_path), recursive = TRUE, showWarnings = FALSE)
 
     write_debug <- function(payload) {
         jsonlite::write_json(payload, debug_path, auto_unbox = TRUE, pretty = TRUE, null = "null")
@@ -448,12 +451,48 @@ call_openai_for_recommendations <- function(existing_collection_data, max_sugges
     list(data = suggestion_data, source = "openai", reason = "OK", model = openai_model)
 }
 
-tracks <- readr::read_csv(here("data", "exports", "tracks.csv"), show_col_types = FALSE)
-if ('"track"' %in% names(tracks)) {
-    tracks <- tracks %>% rename(track = `"track"`)
+load_tracks_data <- function() {
+    tracks_path <- here("data", "exports", "tracks.csv")
+
+    if (file.exists(tracks_path)) {
+        tracks <- readr::read_csv(tracks_path, show_col_types = FALSE)
+    } else {
+        tracks <- tryCatch(
+            {
+                getLastfm(FALSE)
+            },
+            error = function(e) {
+                stop(str_glue("Could not load tracks data from exports or Dropbox: {e$message}"))
+            }
+        )
+    }
+
+    if ('"track"' %in% names(tracks)) {
+        tracks <- tracks %>% rename(track = `"track"`)
+    }
+
+    tracks
 }
 
-plex <- readr::read_csv(here("data", "exports", "plexDB.csv"), show_col_types = FALSE)
+load_plex_data <- function() {
+    plex_path <- here("data", "exports", "plexDB.csv")
+
+    if (file.exists(plex_path)) {
+        return(readr::read_csv(plex_path, show_col_types = FALSE))
+    }
+
+    tryCatch(
+        {
+            getPlex(FALSE)
+        },
+        error = function(e) {
+            stop(str_glue("Could not load Plex data from exports or Dropbox: {e$message}"))
+        }
+    )
+}
+
+tracks <- load_tracks_data()
+plex <- load_plex_data()
 overrides <- load_overrides()
 discogs_collection <- get_discogs_collection("tomcopple")
 
@@ -582,6 +621,7 @@ candidates <- album_scrobbles %>%
     )
 
 candidates_path <- here("data", "exports", "missingDiscogsCandidates.csv")
+dir.create(dirname(candidates_path), recursive = TRUE, showWarnings = FALSE)
 readr::write_csv(candidates, candidates_path)
 
 ai_result <- call_openai_for_recommendations(discogs_collection_for_ai, ai_max_suggestions)
@@ -676,6 +716,7 @@ final_suggestions <- if (nrow(openai_ranked) > 0) {
 }
 
 final_path <- here("data", "exports", "missingDiscogsAISuggestions.csv")
+dir.create(dirname(final_path), recursive = TRUE, showWarnings = FALSE)
 readr::write_csv(final_suggestions, final_path)
 
 cat(str_glue(
