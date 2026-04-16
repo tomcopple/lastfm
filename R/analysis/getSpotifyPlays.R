@@ -13,6 +13,14 @@ lastfm <- getLastfm(T)
 spotID <- Sys.getenv('SPOTIFY_ID')
 spotSecret <- Sys.getenv('SPOTIFY_SECRET')
 spotAuth <- "https://accounts.spotify.com/authorize"
+spotRedirectUri <- Sys.getenv('SPOTIFY_REDIRECT_URI', unset = 'http://localhost:1410/')
+spotCacheDir <- here::here("data", "cache", "spotify_oauth")
+
+if (!dir.exists(spotCacheDir)) {
+    dir.create(spotCacheDir, recursive = TRUE)
+}
+
+options(httr2_oauth_cache = spotCacheDir)
 
 spotClient <- httr2::oauth_client(
     id = spotID,
@@ -26,17 +34,62 @@ getSpotAuth <- function (req) {
         req,
         client = spotClient,
         auth_url = spotAuth, 
-        scope = str_c('playlist-modify', 'playlist-modify-private',
+        scope = str_c('playlist-modify-public', 'playlist-modify-private',
                       'playlist-read-private', 'playlist-read-collaborative',
                       sep = " "),
         cache_disk = TRUE,
-        redirect_uri = "http://localhost:1410/"
+        redirect_uri = spotRedirectUri
     )
+}
+
+performSpotReq <- function(req, context = "Spotify request") {
+    resp <- req %>%
+        req_error(is_error = function(resp) FALSE) %>%
+        req_perform()
+
+    status <- resp_status(resp)
+    if (status >= 400) {
+        body <- tryCatch(resp_body_json(resp), error = function(e) NULL)
+        message <- if (!is.null(body$error$message)) body$error$message else resp_body_string(resp)
+        stop(glue::glue("{context} failed ({status}): {message}"), call. = FALSE)
+    }
+
+    resp
+}
+
+meResp <- httr2::request(base_url = "https://api.spotify.com/v1/me") %>%
+    getSpotAuth() %>%
+    performSpotReq("Get current Spotify user") %>%
+    resp_body_json()
+meID <- meResp %>% pluck("id")
+
+checkPlaylistWriteAccess <- function(playlistID, meID) {
+    plMeta <- httr2::request(base_url = str_glue("https://api.spotify.com/v1/playlists/{playlistID}")) %>%
+        getSpotAuth() %>%
+        req_url_query(fields = "id,name,collaborative,owner(id,display_name)") %>%
+        performSpotReq(glue::glue("Get playlist metadata for {playlistID}")) %>%
+        resp_body_json()
+
+    ownerID <- plMeta %>% pluck("owner", "id")
+    ownerName <- plMeta %>% pluck("owner", "display_name")
+    playlistName <- plMeta %>% pluck("name")
+    isCollaborative <- plMeta %>% pluck("collaborative")
+
+    canModify <- identical(ownerID, meID) || isTRUE(isCollaborative)
+    if (!canModify) {
+        stop(glue::glue(
+            'Cannot modify playlist "{playlistName}" ({playlistID}). ',
+            'Authenticated user is "{meID}" but owner is "{ownerID}" ({ownerName}). ',
+            'Playlist is not collaborative.'
+        ), call. = FALSE)
+    }
+
+    invisible(TRUE)
 }
 # Get list of playlists ---------------------------------------------------
 plReq <- httr2::request(base_url = "https://api.spotify.com/v1/users/tomcopple/playlists") %>% 
     getSpotAuth() %>% 
-    req_perform()
+    performSpotReq("Get Spotify playlists")
 plResp <- plReq %>% resp_body_json()
 howManyPlaylists <- plResp %>% pluck('total')
 
@@ -48,7 +101,7 @@ for (i in 1:reps) {
         getSpotAuth() %>% 
         req_url_query(limit = 50, offset = 50 * (i - 1))
     getPlResp <- getPlReq %>% 
-        req_perform() %>% 
+        performSpotReq(glue::glue("Get Spotify playlists page {i}")) %>% 
         resp_body_string() %>% 
         jsonlite::fromJSON()
     getPlaylists <- getPlResp %>% 
@@ -81,7 +134,7 @@ if (playlist %in% allPlaylists$name) {
 totalReq <- httr2::request(base_url = str_glue("https://api.spotify.com/v1/playlists/{playlistID}/tracks")) %>% 
     getSpotAuth() %>% 
     req_url_query(fields = 'total')
-totalResp <- httr2::req_perform(totalReq) %>% 
+totalResp <- performSpotReq(totalReq, "Get total tracks in playlist") %>% 
     resp_body_string() %>% 
     jsonlite::fromJSON()
 totalTracks <- totalResp %>% pluck('total')
@@ -96,7 +149,7 @@ getTracks <- function(x) {
         req_url_query(fields = "items(track(artists.name,album(name),track_number,name, id))",
                       limit = 100, offset = x*100)
     tracksResp <- tracksReq %>% 
-        req_perform() %>% 
+        performSpotReq(glue::glue("Get playlist tracks at offset {x*100}")) %>% 
         resp_body_string() %>% 
         jsonlite::fromJSON()
     
@@ -195,21 +248,23 @@ top10 <- trackCount %>%
 top10    
 
 ## Then try to send them all to the playlist
+checkPlaylistWriteAccess("1BBr03knQFBNoj3EUN2rpm", meID)
 minReq <- httr2::request(base_url = str_c('https://api.spotify.com/v1/playlists/', "1BBr03knQFBNoj3EUN2rpm", '/tracks')) %>% 
     getSpotAuth() %>% 
     req_body_json(list(
         uris = str_glue("spotify:track:{minPlays$id}")
     )) %>% 
     req_method('PUT')
-minResp <- req_perform(minReq)
+minResp <- performSpotReq(minReq, "Replace tracks in minPlays playlist")
 
+checkPlaylistWriteAccess("1Th3m2O6NYvmx1rn5ymsYu", meID)
 topReq <- httr2::request(base_url = str_c('https://api.spotify.com/v1/playlists/', "1Th3m2O6NYvmx1rn5ymsYu", '/tracks')) %>% 
     getSpotAuth() %>% 
     req_body_json(list(
         uris = str_glue("spotify:track:{top10$id}")
     )) %>% 
     req_method('PUT')
-topResp <- req_perform(topReq)
+topResp <- performSpotReq(topReq, "Replace tracks in top10 playlist")
 
 
 
