@@ -44,6 +44,7 @@ playlist <- lastfm %>%
     filter(is.na(rating)) %>% 
     filter(str_detect(album, 'motown', negate = T),
            str_detect(artist, 'beethoven', negate = T),
+           str_detect(album, 'pop ambient', negate = T),
            str_detect(artist, 'stars of the lid', negate = T)) %>% 
     filter(n > 7) %>% 
     add_count() %>% 
