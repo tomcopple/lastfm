@@ -33,6 +33,30 @@ getPlexRatings <- function(refresh = FALSE, printTree = FALSE) {
                 geom_treemap() +
                 geom_treemap_subgroup_border(size = 1) +
                 scale_fill_brewer(palette = 'Blues')
+
+            progress <- plex %>% 
+                summarise(n1 = n(), n2 = sum(!is.na(rating))) %>% 
+                transmute(perc = n2 / n1, tot = 1 - perc) %>% 
+                tidyr::pivot_longer(cols = everything(), names_to = "key", values_to = "value") %>% 
+                mutate(
+                    key = factor(key, levels = c("tot", "perc")),
+                    label = ifelse(key == "perc", str_c(round(100 * value, 0), "%"), "")
+                ) %>% 
+                ggplot(aes(x = 1, y = value, fill = key, alpha = key)) + 
+                geom_col(position = 'fill', color = "#7AADD2") + 
+                coord_flip() + 
+                scale_fill_manual(values = c("tot" = "#CADAED", "perc" = "#7AADD2")) + 
+                scale_alpha_manual(values = c("tot" = 0.5, "perc" = 1)) + 
+                geom_label(aes(label = label, y = 0.9), size = 6, fill = 'white', label.size = 0, fontface = 2) + 
+                theme_void() + 
+                theme(
+                    legend.position = 'none',
+                    plot.background = element_rect(fill = 'white', color = 'white'),
+                    panel.grid.major = element_blank(),
+                    panel.grid.minor = element_blank(),
+                    panel.border = element_blank(),
+                    plot.margin = margin(10, 8, 2, 8)
+                )
             
             treeFilename <- str_glue("{format(now(), '%Y-%m-%d-%H-%M-%S')}-treemap.png")
             
@@ -40,9 +64,15 @@ getPlexRatings <- function(refresh = FALSE, printTree = FALSE) {
             
             dropboxr::dropbox_auth()
             temp_file <- tempfile(fileext = ".png")
-            ggsave(plot = treemap,
-                   filename = temp_file,
-                   width = 10.5, height = 9.14, units = "in")
+            png(filename = temp_file, width = 10.5, height = 9.14, units = "in", res = 300)
+            grid::grid.newpage()
+            grid::pushViewport(grid::viewport(
+                layout = grid::grid.layout(nrow = 2, ncol = 1, heights = grid::unit(c(0.08, 0.92), "npc"))
+            ))
+            print(progress, vp = grid::viewport(layout.pos.row = 1, layout.pos.col = 1))
+            print(treemap, vp = grid::viewport(layout.pos.row = 2, layout.pos.col = 1))
+            grid::popViewport()
+            dev.off()
             
             dropboxr::upload_dropbox_file(temp_file, str_glue("/R/lastfm/{treeFilename}"), mode= "overwrite")
             unlink(temp_file)
