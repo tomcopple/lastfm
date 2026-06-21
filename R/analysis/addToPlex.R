@@ -44,11 +44,11 @@ playlist <- lastfm %>%
     filter(is.na(rating)) %>% 
     filter(str_detect(album, 'motown', negate = T),
            str_detect(artist, 'beethoven', negate = T),
-           str_detect(album, 'pop ambient', negate = T),
+           str_detect(album,'pop ambient', negate = T),
            str_detect(artist, 'stars of the lid', negate = T)) %>% 
-    filter(n > 7) %>% 
-    add_count() %>% 
-    sample_n(size = ifelse(nrow(.) > 25, 25, nrow(.)))
+    ungroup() %>% 
+    top_n(n = 25,wt = n) %>% 
+    arrange(desc(n)) %>% slice(1:25)
 playlist
 
 ## Want to delete everything first?
