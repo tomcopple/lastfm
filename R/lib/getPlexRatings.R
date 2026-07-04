@@ -1,6 +1,6 @@
 ## Query Plex API?
 
-getPlexRatings <- function(refresh = FALSE, printTree = FALSE) {
+getPlexRatings <- function(refresh = FALSE, printTree = FALSE, backup = FALSE) {
     
     suppressMessages({
             library(tidyverse);library(httr);library(lubridate);library(treemapify);library(dropboxr)
@@ -13,7 +13,7 @@ getPlexRatings <- function(refresh = FALSE, printTree = FALSE) {
     if(refresh) {
         
         print("Downloading plex data")
-        plex <- getPlex(refresh = TRUE)
+        plex <- getPlex(refresh = TRUE, backup = backup)
         
         .GlobalEnv$plex <- plex
         
@@ -98,30 +98,28 @@ getPlexRatings <- function(refresh = FALSE, printTree = FALSE) {
     return(plex)
 }
 
-plex <- getPlexRatings(T, T)
+plex <- getPlexRatings(T, T, F)
 
 str_c(100*round(1-(sum(is.na(plex$rating))/nrow(plex)),2), "% complete")
 
 albumRatings %>%
     filter(x == y)
 
+
+## Check for any complete albums not worth keeping
+albumRatings %>% 
+    filter(x == y) %>% 
+    tail()
 plex %>% 
-    filter(str_detect(album, 'Complete Motown')) %>% 
-    mutate(title = str_sub(album, start = -4)) %>% 
-    arrange(title) %>% 
-    mutate(title = forcats::fct_inorder(title)) %>% 
-    ggplot(aes(x = trackNum,y = rating,color = title, group = title,text = track)) + 
-    geom_point(alpha = 0.6) + 
-    stat_smooth(se = FALSE)
-
-plotly::ggplotly()
-
-plex %>% 
-    filter(str_detect(album,'Complete Motown')) %>% 
-    filter(!is.na(rating)) %>% 
-    group_by(album) %>% 
-    summarise(avrat = mean(rating)) %>% 
-    mutate(album = str_sub(album,-4)) %>% 
-    arrange(album) %>% 
-    ggplot(aes(x = avrat,y = album)) +geom_col(fill = 'lightblue')
-
+    group_by(albumArtist, album) %>% 
+    add_count(name = 'y') %>% 
+    filter(y > 3, !is.na(rating)) %>% 
+    add_count(name = 'x') %>% 
+    filter(x > 2) %>% 
+    select(albumArtist, artist, album, track, rating, x, y) %>% 
+    filter(x == y) %>% 
+    group_by(albumArtist, album) %>% 
+    mutate(maxRat = max(rating)) %>% 
+    select(albumArtist, artist, album, track, rating, maxRat) %>% 
+    filter(maxRat < 6)
+    

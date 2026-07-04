@@ -1,6 +1,6 @@
 ## Get all Plex info
 
-getPlex <- function(refresh = FALSE) {
+getPlex <- function(refresh = FALSE, backup = FALSE) {
     
     library(tidyverse);library(httr2);library(lubridate);library(jsonlite);library(httr2);library(xml2);library(dropboxr)
     dropboxr::dropbox_auth()
@@ -42,6 +42,11 @@ getPlex <- function(refresh = FALSE) {
         
         print("Got Plex, uploading to Dropbox")
         dropboxr::upload_df_to_dropbox(plex, dropbox_path = "/R/lastfm/plexDB.csv")
+        if (backup) {
+            dropboxr::upload_df_to_dropbox(
+                plex, 
+                dropbox_path = str_glue("/R/lastfm/{lubridate::today()}-plexDB.csv"))
+        }
         
     } else {
         
