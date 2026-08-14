@@ -109,7 +109,7 @@ albumRatings %>%
 ## Check for any complete albums not worth keeping
 albumRatings %>% 
     filter(x == y) %>% 
-    tail()
+    tail(10)
 plex %>% 
     group_by(albumArtist, album) %>% 
     add_count(name = 'y') %>% 
